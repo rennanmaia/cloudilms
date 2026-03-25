@@ -1,0 +1,236 @@
+/* ===========================
+   CloudiLMS - Front-end CSS
+   =========================== */
+:root {
+  --bg:        #0f172a;
+  --bg2:       #1e293b;
+  --bg3:       #334155;
+  --text:      #f1f5f9;
+  --text2:     #94a3b8;
+  --text3:     #64748b;
+  --primary:   #38bdf8;
+  --primary2:  #0ea5e9;
+  --success:   #22c55e;
+  --warning:   #f59e0b;
+  --danger:    #ef4444;
+  --radius:    .75rem;
+  --shadow:    0 4px 24px rgba(0,0,0,.4);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { color: var(--primary2); }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
+
+/* ── Header ─────────────────────────────────── */
+.site-header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bg3);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-inner {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px;
+}
+.site-logo { font-size: 1.25rem; font-weight: 700; color: var(--text); }
+.site-nav  { display: flex; align-items: center; gap: 1.5rem; }
+.site-nav a { color: var(--text2); font-size: .95rem; transition: color .2s; }
+.site-nav a:hover { color: var(--text); }
+.btn-nav { padding: .4rem .9rem; border-radius: 9999px; border: 1px solid var(--bg3); color: var(--text) !important; }
+.btn-nav-primary { background: var(--primary); color: var(--bg) !important; border-color: var(--primary); font-weight: 600; }
+.btn-nav-primary:hover { background: var(--primary2); }
+
+/* ── Main / Footer ──────────────────────────── */
+.site-main   { padding: 2rem 0 4rem; }
+.site-footer { background: var(--bg2); border-top: 1px solid var(--bg3); padding: 1.5rem 0; text-align: center; color: var(--text3); font-size: .875rem; }
+
+/* ── Hero ───────────────────────────────────── */
+.hero { text-align: center; padding: 3rem 1rem; }
+.hero h1 { font-size: 2.5rem; font-weight: 800; margin-bottom: .75rem; }
+.hero p  { color: var(--text2); font-size: 1.125rem; }
+
+/* ── Course grid ────────────────────────────── */
+.course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+.course-card {
+  background: var(--bg2);
+  border: 1px solid var(--bg3);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: transform .2s, box-shadow .2s;
+  display: flex; flex-direction: column;
+  color: var(--text);
+}
+.course-card:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
+.course-thumb {
+  height: 180px;
+  background-size: cover; background-position: center;
+  background-color: var(--bg3);
+}
+.course-thumb-placeholder { display: flex; align-items: center; justify-content: center; font-size: 3rem; }
+.course-card-body { padding: 1.25rem; flex: 1; display: flex; flex-direction: column; gap: .5rem; }
+.course-title  { font-size: 1.1rem; font-weight: 600; }
+.course-desc   { color: var(--text2); font-size: .9rem; flex: 1; }
+.course-meta   { display: flex; justify-content: space-between; align-items: center; font-size: .875rem; color: var(--text3); margin-top: auto; }
+.btn-enroll    { color: var(--primary); font-weight: 600; }
+
+/* ── Course page ────────────────────────────── */
+.course-hero {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); padding: 2rem; margin-bottom: 2rem;
+  display: flex; gap: 2rem; flex-wrap: wrap;
+}
+.course-hero-thumb { width: 280px; height: 175px; border-radius: .5rem; background-size: cover; background-position: center; flex-shrink: 0; background-color: var(--bg3); }
+.course-hero-info  { flex: 1; min-width: 260px; }
+.course-hero-info h1 { font-size: 1.75rem; margin-bottom: .75rem; }
+.course-hero-desc  { color: var(--text2); margin-bottom: 1rem; }
+.course-hero-meta  { display: flex; gap: 1.5rem; color: var(--text3); font-size: .9rem; margin-bottom: 1.25rem; }
+.btn-hero {
+  display: inline-block; padding: .75rem 1.75rem;
+  background: var(--primary); color: var(--bg);
+  font-weight: 700; border-radius: 9999px; font-size: 1rem;
+  transition: background .2s;
+}
+.btn-hero:hover { background: var(--primary2); color: var(--bg); }
+
+/* ── Lesson list (course page) ──────────────── */
+.lesson-list-public h2 { font-size: 1.25rem; margin-bottom: 1rem; }
+.public-lessons { list-style: none; display: flex; flex-direction: column; gap: .5rem; }
+.public-lesson-item {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: .5rem; overflow: hidden;
+}
+.public-lesson-item.lesson-done { border-color: #166534; }
+.lesson-link, .lesson-locked {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .875rem 1.25rem; color: var(--text);
+  transition: background .15s;
+}
+.lesson-link:hover { background: var(--bg3); color: var(--text); }
+.lesson-locked { cursor: default; color: var(--text3); }
+.lesson-index { font-size: .8rem; color: var(--text3); min-width: 1.5rem; }
+.lesson-name  { flex: 1; }
+.lesson-dur   { font-size: .8rem; color: var(--text3); }
+.lesson-check { color: var(--success); font-weight: 700; }
+.lesson-lock  { color: var(--text3); }
+
+/* ── Watch layout ───────────────────────────── */
+.watch-layout {
+  display: flex; height: calc(100vh - 64px); overflow: hidden;
+  margin: -2rem -.5rem; /* override container padding */
+}
+.watch-sidebar {
+  width: 340px; flex-shrink: 0;
+  background: var(--bg2); border-right: 1px solid var(--bg3);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.watch-sidebar-header {
+  padding: 1rem;
+  border-bottom: 1px solid var(--bg3);
+  font-size: .875rem;
+}
+.watch-sidebar-header a { color: var(--text2); display: block; margin-bottom: .75rem; }
+.progress-bar-wrap { display: flex; align-items: center; gap: .5rem; }
+.progress-bar-track { flex: 1; height: 6px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+.progress-bar-fill  { height: 100%; background: var(--primary); border-radius: 99px; transition: width .4s; }
+.progress-label { font-size: .75rem; color: var(--text3); white-space: nowrap; }
+.watch-lesson-list { flex: 1; overflow-y: auto; list-style: none; padding: .5rem; }
+.watch-lesson-item a {
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .75rem; border-radius: .5rem; color: var(--text2);
+  transition: background .15s;
+}
+.watch-lesson-item a:hover { background: var(--bg3); color: var(--text); }
+.watch-lesson-item.active a { background: rgba(56,189,248,.1); color: var(--primary); }
+.watch-lesson-item.done .wl-check { color: var(--success); }
+.wl-index { font-size: .75rem; color: var(--text3); margin-top: .15rem; min-width: 1.25rem; }
+.wl-title { flex: 1; font-size: .9rem; }
+.wl-check { color: var(--text3); font-size: .875rem; }
+.watch-main  { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.video-container { flex: 1; background: #000; min-height: 0; }
+.video-container iframe { width: 100%; height: 100%; display: block; }
+.watch-controls {
+  background: var(--bg2); border-top: 1px solid var(--bg3);
+  padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+}
+.watch-lesson-title h2 { font-size: 1.1rem; }
+.duration { color: var(--text3); font-size: .875rem; }
+.watch-actions { display: flex; gap: .75rem; align-items: center; }
+
+/* ── Buttons ────────────────────────────────── */
+.btn {
+  display: inline-block; padding: .5rem 1rem;
+  background: var(--bg3); color: var(--text);
+  border: 1px solid var(--bg3); border-radius: .5rem;
+  font-size: .9rem; cursor: pointer; transition: background .15s;
+}
+.btn:hover { background: var(--bg2); color: var(--text); }
+.btn-primary { background: var(--primary); color: var(--bg); border-color: var(--primary); font-weight: 600; }
+.btn-primary:hover { background: var(--primary2); border-color: var(--primary2); color: var(--bg); }
+.btn-nav-prev, .btn-nav-next { background: var(--bg3); }
+.btn-complete { background: var(--bg3); }
+.btn-done { background: #166534; border-color: #166534; color: #bbf7d0; }
+.w-full { width: 100%; text-align: center; }
+
+/* ── Auth ───────────────────────────────────── */
+.auth-wrap { display: flex; justify-content: center; align-items: flex-start; padding-top: 3rem; }
+.auth-box {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); padding: 2.5rem; width: 100%; max-width: 420px;
+}
+.auth-title { font-size: 1.5rem; margin-bottom: 1.5rem; text-align: center; }
+.auth-link  { text-align: center; color: var(--text3); font-size: .9rem; margin-top: 1.25rem; }
+
+/* ── Forms ──────────────────────────────────── */
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; font-size: .85rem; color: var(--text2); margin-bottom: .3rem; }
+.form-control {
+  width: 100%; padding: .6rem .85rem;
+  background: var(--bg); border: 1px solid var(--bg3);
+  border-radius: .5rem; color: var(--text); font-size: .95rem;
+}
+.form-control:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+/* ── Alerts ─────────────────────────────────── */
+.alert { padding: .75rem 1rem; border-radius: .5rem; margin-bottom: 1rem; font-size: .9rem; }
+.alert-success { background: #052e16; color: #86efac; border: 1px solid #14532d; }
+.alert-danger  { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+
+/* ── Progress mini ──────────────────────────── */
+.progress-mini-wrap { display: flex; align-items: center; gap: .5rem; }
+.progress-mini-track { flex: 1; height: 5px; background: var(--bg3); border-radius: 99px; overflow: hidden; }
+.progress-mini-fill  { height: 100%; background: var(--primary); border-radius: 99px; }
+.progress-mini-wrap span { font-size: .75rem; color: var(--text3); }
+
+/* ── Empty state ────────────────────────────── */
+.empty-state { text-align: center; padding: 5rem 2rem; }
+.empty-icon  { font-size: 4rem; margin-bottom: 1rem; }
+.empty-state h2  { font-size: 1.5rem; color: var(--text2); margin-bottom: .75rem; }
+.empty-state p   { color: var(--text3); }
+
+.page-heading { font-size: 1.75rem; font-weight: 700; margin-bottom: 1.5rem; }
+
+/* ── Responsive ─────────────────────────────── */
+@media (max-width: 768px) {
+  .watch-layout { flex-direction: column; height: auto; }
+  .watch-sidebar { width: 100%; max-height: 40vh; }
+  .video-container { height: 56vw; min-height: 200px; }
+  .course-hero { flex-direction: column; }
+  .course-hero-thumb { width: 100%; }
+  .site-nav { gap: 1rem; }
+  .hero h1 { font-size: 1.75rem; }
+}
