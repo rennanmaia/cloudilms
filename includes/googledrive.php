@@ -5,6 +5,7 @@
  * Funciona para pastas públicas "qualquer pessoa com o link pode ver"
  */
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/database.php';
 
 class GoogleDrive {
 
@@ -12,7 +13,11 @@ class GoogleDrive {
     private string $baseUrl = 'https://www.googleapis.com/drive/v3';
 
     public function __construct() {
-        $this->apiKey = GDRIVE_API_KEY;
+        $db   = Database::getConnection();
+        $stmt = $db->prepare("SELECT value FROM settings WHERE key_name = 'gdrive_api_key' LIMIT 1");
+        $stmt->execute();
+        $row  = $stmt->fetch(PDO::FETCH_ASSOC);
+        $this->apiKey = $row ? decryptValue((string) $row['value']) : '';
     }
 
     /**

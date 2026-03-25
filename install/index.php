@@ -45,9 +45,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('INSERT INTO users (name, email, password, role, active, created_at) VALUES (?, ?, ?, "admin", 1, NOW())')
                 ->execute([$adminName, $adminEmail, $hash]);
 
-            // Salva API key nas settings
+            // Gera chave de criptografia para esta instalação
+            $encryptKey = bin2hex(random_bytes(32));
+
+            // Salva API key criptografada nas settings
+            $iv     = random_bytes(16);
+            $cipher = openssl_encrypt($apiKey, 'AES-256-CBC', hex2bin($encryptKey), OPENSSL_RAW_DATA, $iv);
+            $encryptedApiKey = base64_encode($iv . $cipher);
             $pdo->prepare('INSERT INTO settings (key_name, value) VALUES ("gdrive_api_key", ?) ON DUPLICATE KEY UPDATE value = ?')
-                ->execute([$apiKey, $apiKey]);
+                ->execute([$encryptedApiKey, $encryptedApiKey]);
             $pdo->prepare('INSERT INTO settings (key_name, value) VALUES ("app_url", ?) ON DUPLICATE KEY UPDATE value = ?')
                 ->execute([$appUrl, $appUrl]);
 
@@ -61,9 +67,26 @@ define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME', 'CloudiLMS');
 define('APP_URL', " . var_export($appUrl, true) . ");
 define('APP_VERSION', '1.0.0');
-define('GDRIVE_API_KEY', " . var_export($apiKey, true) . ");
+// Chave de criptografia AES-256 (32 bytes em hex). Nunca commitar em repositórios públicos.
+define('ENCRYPT_KEY', '" . $encryptKey . "');
 define('SESSION_LIFETIME', 3600 * 8);
 define('HASH_ALGO', PASSWORD_BCRYPT);
+
+function encryptValue(string \$plain): string {
+    if (\$plain === '') return '';
+    \$iv     = random_bytes(16);
+    \$cipher = openssl_encrypt(\$plain, 'AES-256-CBC', hex2bin(ENCRYPT_KEY), OPENSSL_RAW_DATA, \$iv);
+    return base64_encode(\$iv . \$cipher);
+}
+
+function decryptValue(string \$stored): string {
+    if (\$stored === '') return '';
+    \$data = base64_decode(\$stored, true);
+    if (\$data === false || strlen(\$data) < 17) return '';
+    \$plain = openssl_decrypt(substr(\$data, 16), 'AES-256-CBC', hex2bin(ENCRYPT_KEY), OPENSSL_RAW_DATA, substr(\$data, 0, 16));
+    return \$plain !== false ? \$plain : '';
+}
+
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.cookie_httponly', 1);
     ini_set('session.use_strict_mode', 1);

@@ -22,17 +22,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $allowReg    = isset($_POST['allow_registration']) ? '1' : '0';
         $testFolder  = trim($_POST['test_folder'] ?? '');
 
-        // Salva no banco
+        // Salva no banco (API key criptografada)
         $save = $db->prepare('INSERT INTO settings (key_name, value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?');
-        $save->execute(['site_name'         , $siteName , $siteName]);
-        $save->execute(['gdrive_api_key'    , $apiKey   , $apiKey]);
-        $save->execute(['allow_registration', $allowReg , $allowReg]);
-
-        // Atualiza config.php em memória (opcional - requer escrever no arquivo)
-        $configFile = __DIR__ . '/../includes/config.php';
-        $config = file_get_contents($configFile);
-        $config = preg_replace("/define\('GDRIVE_API_KEY',\s*'[^']*'\)/", "define('GDRIVE_API_KEY', " . var_export($apiKey, true) . ")", $config);
-        file_put_contents($configFile, $config);
+        $save->execute(['site_name'         , $siteName              , $siteName]);
+        $save->execute(['gdrive_api_key'    , encryptValue($apiKey)  , encryptValue($apiKey)]);
+        $save->execute(['allow_registration', $allowReg              , $allowReg]);
 
         // Teste de conexão
         if ($testFolder && $apiKey) {
@@ -98,7 +92,7 @@ adminHeader('Configurações', 'settings');
       <div class="form-group">
         <label>Google Drive API Key</label>
         <input type="text" name="gdrive_api_key"
-               value="<?= htmlspecialchars($settings['gdrive_api_key'] ?? '') ?>"
+               value="<?= htmlspecialchars(decryptValue($settings['gdrive_api_key'] ?? '')) ?>"  
                class="form-control" placeholder="AIzaSy...">
       </div>
 
