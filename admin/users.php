@@ -85,6 +85,7 @@ if ($action === 'list' || (!$action)) {
             <td><span class="badge <?= $u['active']?'badge-success':'badge-danger' ?>"><?= $u['active']?'Ativo':'Inativo' ?></span></td>
             <td class="actions">
               <a href="users.php?action=edit&id=<?= $u['id'] ?>" class="btn btn-sm">✏️ Editar</a>
+              <a href="audit.php?user=<?= $u['id'] ?>" class="btn btn-sm btn-secondary">🔎 Auditoria</a>
               <form method="post" action="users.php?action=delete&id=<?= $u['id'] ?>" style="display:inline" onsubmit="return confirm('Excluir usuário?')">
                 <input type="hidden" name="csrf" value="<?= $csrf ?>">
                 <button class="btn btn-sm btn-danger">🗑</button>

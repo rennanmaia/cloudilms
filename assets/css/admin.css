@@ -187,3 +187,117 @@ hr { border: none; border-top: 1px solid var(--bg3); }
 @media (max-width: 768px) {
   .sidebar { display: none; }
 }
+
+/* ───────────────────────────────────────────────
+   Auditoria
+─────────────────────────────────────────────── */
+.audit-stats-row {
+  display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem;
+}
+.audit-stat {
+  flex: 1 1 140px; background: var(--bg2); border-radius: .5rem;
+  padding: .9rem 1rem; text-align: center;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.audit-stat-val { font-size: 1.7rem; font-weight: 700; color: var(--accent); }
+.audit-stat-lbl { font-size: .8rem; color: var(--text3); margin-top: .1rem; }
+
+.audit-filter-form {
+  display: flex; flex-wrap: wrap; gap: .6rem;
+  background: var(--bg2); border-radius: .5rem;
+  padding: .9rem 1rem; margin-bottom: 1rem;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.audit-filter-label {
+  display: flex; flex-direction: column; gap: .25rem;
+  font-size: .8rem; color: var(--text3); flex: 1 1 160px;
+}
+.audit-filter-label select,
+.audit-filter-label input { font-size: .85rem; }
+
+.audit-table {
+  font-size: .82rem; width: 100%; border-collapse: collapse;
+}
+.audit-table th {
+  border-bottom: 1px solid rgba(255,255,255,.1);
+  padding: .4rem .6rem; color: var(--text3); font-weight: 600;
+  text-align: left; white-space: nowrap;
+}
+.audit-table td {
+  padding: .35rem .6rem; border-bottom: 1px solid rgba(255,255,255,.04);
+  vertical-align: middle;
+}
+.audit-ts   { color: var(--text3); white-space: nowrap; }
+.audit-url  { color: var(--text3); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.audit-ip   { color: var(--text3); font-size: .78rem; white-space: nowrap; }
+.audit-anon { color: var(--text3); font-style: italic; }
+.audit-user-link { color: var(--accent); }
+.audit-entity { font-size: .8rem; color: var(--text3); }
+.badge-audit-dim { background: rgba(255,255,255,.07); color: var(--text3); }
+
+.audit-pagination { display: flex; gap: .35rem; flex-wrap: wrap; margin-top: 1rem; }
+.audit-pagination a, .audit-pagination span {
+  padding: .25rem .55rem; border-radius: .25rem; font-size: .82rem;
+  background: var(--bg3); color: var(--text); text-decoration: none;
+  border: 1px solid rgba(255,255,255,.08);
+}
+.audit-pagination .current { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Student detail header */
+.audit-student-header {
+  display: flex; align-items: center; gap: 1rem;
+  background: var(--bg2); border-radius: .5rem;
+  padding: 1rem 1.25rem; margin-bottom: 1rem;
+  border: 1px solid rgba(255,255,255,.06);
+}
+.audit-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--accent); display: flex; align-items: center;
+  justify-content: center; font-size: 1.5rem; font-weight: 700;
+  flex-shrink: 0;
+}
+.audit-student-info h2 { margin: 0; font-size: 1.1rem; }
+.audit-student-info p  { margin: .15rem 0 0; font-size: .85rem; color: var(--text3); }
+
+/* Tabs */
+.audit-tabs {
+  display: flex; gap: .5rem; border-bottom: 2px solid rgba(255,255,255,.08);
+  margin-bottom: 1.25rem;
+}
+.audit-tab {
+  padding: .5rem 1rem; font-size: .9rem; cursor: pointer;
+  border-radius: .35rem .35rem 0 0; text-decoration: none;
+  color: var(--text3); border: 2px solid transparent;
+  border-bottom: none;
+}
+.audit-tab.active {
+  background: var(--bg2); color: var(--text);
+  border-color: rgba(255,255,255,.1); margin-bottom: -2px;
+}
+
+/* Course progress within student view */
+.course-progress-summary {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .6rem .75rem; cursor: pointer;
+  border-radius: .375rem; transition: background .15s;
+}
+.course-progress-summary:hover { background: rgba(255,255,255,.04); }
+.cps-left  { flex: 1; }
+.cps-title { font-size: .95rem; font-weight: 600; }
+.cps-meta  { font-size: .8rem; color: var(--text3); margin-top: .15rem; }
+.cps-right { flex-shrink: 0; text-align: right; }
+.cps-pct   { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
+
+.course-details-wrap {
+  padding: .4rem .75rem .75rem 1.5rem;
+}
+.audit-lesson-table { font-size: .82rem; width: 100%; border-collapse: collapse; }
+.audit-lesson-table th {
+  text-align: left; font-size: .78rem; color: var(--text3);
+  padding: .3rem .5rem; border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.audit-lesson-table td {
+  padding: .3rem .5rem; border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.row-done td { opacity: .55; }
+.row-done td:first-child::before { content: '✅ '; }
