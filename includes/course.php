@@ -72,16 +72,87 @@ class CourseModel {
 
     public function deleteCourse(int $id): bool {
         $this->db->prepare('DELETE FROM lessons WHERE course_id = ?')->execute([$id]);
+        $this->db->prepare('DELETE FROM topics WHERE course_id = ?')->execute([$id]);
         $this->db->prepare('DELETE FROM enrollments WHERE course_id = ?')->execute([$id]);
         $this->db->prepare('DELETE FROM progress WHERE course_id = ?')->execute([$id]);
         return $this->db->prepare('DELETE FROM courses WHERE id = ?')->execute([$id]);
+    }
+
+    // ── Tópicos ──────────────────────────────────────────────────────────────
+
+    public function getTopicsByCourse(int $courseId): array {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM topics WHERE course_id = ? ORDER BY sort_order ASC, id ASC'
+        );
+        $stmt->execute([$courseId]);
+        return $stmt->fetchAll();
+    }
+
+    public function createTopic(int $courseId, string $title, int $order = 0): int {
+        $this->db->prepare('INSERT INTO topics (course_id, title, sort_order) VALUES (?, ?, ?)')
+            ->execute([$courseId, $title, $order]);
+        return (int)$this->db->lastInsertId();
+    }
+
+    public function updateTopic(int $id, string $title): void {
+        $this->db->prepare('UPDATE topics SET title = ? WHERE id = ?')->execute([$title, $id]);
+    }
+
+    public function updateTopicOrder(int $id, int $order): void {
+        $this->db->prepare('UPDATE topics SET sort_order = ? WHERE id = ?')->execute([$order, $id]);
+    }
+
+    public function deleteTopic(int $topicId): void {
+        $this->db->prepare('UPDATE lessons SET topic_id = NULL WHERE topic_id = ?')->execute([$topicId]);
+        $this->db->prepare('DELETE FROM topics WHERE id = ?')->execute([$topicId]);
+    }
+
+    public function assignLessonToTopic(int $lessonId, ?int $topicId): void {
+        $this->db->prepare('UPDATE lessons SET topic_id = ? WHERE id = ?')->execute([$topicId, $lessonId]);
+    }
+
+    /**
+     * Retorna aulas agrupadas por tópico.
+     * Cada grupo: ['topic' => array|null, 'lessons' => array]
+     */
+    public function getLessonsGroupedByTopic(int $courseId): array {
+        $topics  = $this->getTopicsByCourse($courseId);
+        $lessons = $this->getLessonsByCourse($courseId);
+
+        if (empty($topics)) {
+            return [['topic' => null, 'lessons' => $lessons]];
+        }
+
+        $byTopic = [];
+        foreach ($lessons as $l) {
+            $key = $l['topic_id'] !== null ? (int)$l['topic_id'] : 0;
+            $byTopic[$key][] = $l;
+        }
+
+        $groups = [];
+        foreach ($topics as $t) {
+            $groups[] = [
+                'topic'   => $t,
+                'lessons' => $byTopic[(int)$t['id']] ?? [],
+            ];
+        }
+        if (!empty($byTopic[0])) {
+            $groups[] = [
+                'topic'   => ['id' => null, 'title' => 'Sem tópico'],
+                'lessons' => $byTopic[0],
+            ];
+        }
+        return $groups;
     }
 
     // ── Aulas ───────────────────────────────────────────────────────────────
 
     public function getLessonsByCourse(int $courseId): array {
         $stmt = $this->db->prepare(
-            'SELECT * FROM lessons WHERE course_id = ? ORDER BY sort_order ASC, title ASC'
+            'SELECT l.* FROM lessons l
+             LEFT JOIN topics t ON l.topic_id = t.id
+             WHERE l.course_id = ?
+             ORDER BY COALESCE(t.sort_order, 9999) ASC, l.sort_order ASC, l.title ASC'
         );
         $stmt->execute([$courseId]);
         return $stmt->fetchAll();
@@ -94,39 +165,87 @@ class CourseModel {
     }
 
     public function syncLessons(int $courseId, array $driveFiles): int {
-        // Busca aulas já existentes para não duplicar
-        $stmt = $this->db->prepare('SELECT gdrive_file_id FROM lessons WHERE course_id = ?');
-        $stmt->execute([$courseId]);
-        $existing = array_column($stmt->fetchAll(), 'gdrive_file_id');
-
         $added = 0;
-        $order = count($existing) + 1;
-
         foreach ($driveFiles as $file) {
-            if (in_array($file['id'], $existing)) continue;
-            $mime = $file['mimeType'] ?? '';
-            if ($mime === 'application/vnd.google-apps.folder') continue;
-
-            $duration = null;
-            if (!empty($file['videoMediaMetadata']['durationMillis'])) {
-                $duration = (int)round($file['videoMediaMetadata']['durationMillis'] / 1000);
-            }
-
-            $stmt2 = $this->db->prepare(
-                'INSERT INTO lessons (course_id, title, gdrive_file_id, mime_type, duration_seconds, sort_order, created_at)
-                 VALUES (:course_id, :title, :gdrive_file_id, :mime_type, :duration_seconds, :sort_order, NOW())'
-            );
-            $stmt2->execute([
-                ':course_id'        => $courseId,
-                ':title'            => $this->cleanTitle($file['name']),
-                ':gdrive_file_id'   => $file['id'],
-                ':mime_type'        => $mime,
-                ':duration_seconds' => $duration,
-                ':sort_order'       => $order++,
-            ]);
-            $added++;
+            $added += $this->insertLesson($courseId, null, $file);
         }
         return $added;
+    }
+
+    /**
+     * Sincroniza aulas detectando subpastas como tópicos.
+     * $rootVideos   = vídeos na raiz da pasta principal
+     * $subfolderData = ['Nome da Pasta' => [array de arquivos Drive], ...]
+     */
+    public function syncLessonsWithTopics(int $courseId, array $rootVideos, array $subfolderData): int {
+        $added = 0;
+
+        // Vídeos na raiz → sem tópico
+        foreach ($rootVideos as $file) {
+            $added += $this->insertLesson($courseId, null, $file);
+        }
+
+        // Tópicos existentes indexados por nome
+        $existingTopics = $this->getTopicsByCourse($courseId);
+        $topicsByName   = [];
+        foreach ($existingTopics as $t) {
+            $topicsByName[mb_strtolower($t['title'])] = (int)$t['id'];
+        }
+        $topicOrder = count($existingTopics);
+
+        foreach ($subfolderData as $folderName => $files) {
+            $nameKey = mb_strtolower($folderName);
+            if (!isset($topicsByName[$nameKey])) {
+                $topicId = $this->createTopic($courseId, $folderName, ++$topicOrder);
+                $topicsByName[$nameKey] = $topicId;
+            } else {
+                $topicId = $topicsByName[$nameKey];
+            }
+            foreach ((array)$files as $file) {
+                $added += $this->insertLesson($courseId, $topicId, $file);
+            }
+        }
+
+        return $added;
+    }
+
+    /** Insere uma única aula (sem duplicar). Retorna 1 se inserida, 0 se já existia. */
+    private function insertLesson(int $courseId, ?int $topicId, array $file): int {
+        $mime = $file['mimeType'] ?? '';
+        if (!str_starts_with($mime, 'video/')) return 0;
+
+        $check = $this->db->prepare('SELECT 1 FROM lessons WHERE course_id = ? AND gdrive_file_id = ?');
+        $check->execute([$courseId, $file['id']]);
+        if ($check->fetch()) return 0;
+
+        $duration = null;
+        if (!empty($file['videoMediaMetadata']['durationMillis'])) {
+            $duration = (int)round($file['videoMediaMetadata']['durationMillis'] / 1000);
+        }
+
+        // sort_order dentro do mesmo tópico
+        if ($topicId !== null) {
+            $stmtMax = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lessons WHERE course_id = ? AND topic_id = ?');
+            $stmtMax->execute([$courseId, $topicId]);
+        } else {
+            $stmtMax = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lessons WHERE course_id = ? AND topic_id IS NULL');
+            $stmtMax->execute([$courseId]);
+        }
+        $maxOrder = (int)$stmtMax->fetchColumn();
+
+        $this->db->prepare(
+            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, mime_type, duration_seconds, sort_order, created_at)
+             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :mime_type, :duration_seconds, :sort_order, NOW())'
+        )->execute([
+            ':course_id'        => $courseId,
+            ':topic_id'         => $topicId,
+            ':title'            => $this->cleanTitle($file['name']),
+            ':gdrive_file_id'   => $file['id'],
+            ':mime_type'        => $mime,
+            ':duration_seconds' => $duration,
+            ':sort_order'       => $maxOrder + 1,
+        ]);
+        return 1;
     }
 
     public function updateLessonOrder(int $lessonId, int $order): void {

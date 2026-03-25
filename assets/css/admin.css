@@ -136,6 +136,48 @@ select.form-control   { cursor: pointer; }
   padding: .75rem 1rem; border-bottom: 1px solid var(--bg3);
   cursor: grab; transition: background .15s;
 }
+
+/* ── Topics admin layout ────────────────────── */
+.lessons-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+.topics-panel, .lessons-panel {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: .5rem; padding: 1rem;
+}
+.topics-panel h3, .lessons-panel h3 { font-size: 1rem; margin-bottom: .75rem; }
+.topic-manage-list { list-style: none; display: flex; flex-direction: column; gap: .25rem; }
+.topic-manage-item {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .45rem .6rem; border-radius: .375rem;
+  background: var(--bg3); cursor: grab;
+  font-size: .875rem;
+  transition: background .15s;
+}
+.topic-manage-item:hover { background: rgba(255,255,255,.08); }
+.topic-manage-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topic-manage-actions { display: flex; gap: .25rem; flex-shrink: 0; }
+.topic-manage-actions button { font-size: .75rem; }
+.grouped-lessons { display: flex; flex-direction: column; gap: 1rem; }
+.topic-group {}
+.topic-group-header {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .4rem .6rem; border-radius: .375rem;
+  background: var(--bg3); font-size: .85rem; font-weight: 600;
+  margin-bottom: .35rem;
+}
+.topic-group-header--none { color: var(--text3); font-style: italic; }
+.lesson-sublist { list-style: none; }
+.topic-assign-select {
+  background: var(--bg3); color: var(--text);
+  border: 1px solid rgba(255,255,255,.1); border-radius: .25rem;
+  font-size: .78rem; padding: .2rem .35rem;
+  cursor: pointer;
+}
+.mt-1 { margin-top: .25rem; }
 .lesson-item:hover   { background: rgba(255,255,255,.03); }
 .lesson-item.dragging { opacity: .5; background: var(--bg3); }
 .drag-handle { color: var(--text3); cursor: grab; font-size: 1.1rem; }

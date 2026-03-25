@@ -17,6 +17,8 @@ $course = $model->getCourseBySlug($slug);
 if (!$course) { http_response_code(404); siteHeader('Curso não encontrado'); echo '<div class="empty-state"><h2>Curso não encontrado</h2></div>'; siteFooter(); exit; }
 
 $lessons  = $model->getLessonsByCourse($course['id']);
+$grouped  = $model->getLessonsGroupedByTopic($course['id']);
+$hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
 $logged   = $auth->isLoggedIn();
 $enrolled = $logged && $model->isEnrolled((int)$_SESSION['user_id'], $course['id']);
 $progress = $enrolled ? $model->getProgress((int)$_SESSION['user_id'], $course['id']) : [];
@@ -64,15 +66,57 @@ siteHeader($course['title']);
   <!-- Lista de aulas -->
   <div class="lesson-list-public">
     <h2>Conteúdo do curso</h2>
+
+    <?php if ($hasTopics): ?>
+    <!-- Vista agrupada por tópico -->
+    <?php $globalIndex = 0; ?>
+    <?php foreach ($grouped as $group): ?>
+    <?php if ($group['topic']): ?>
+    <div class="topic-section">
+      <div class="topic-section-header">
+        <div class="topic-section-title">
+          <span class="topic-section-icon">📁</span>
+          <?= htmlspecialchars($group['topic']['title']) ?>
+        </div>
+        <span class="topic-section-count"><?= count($group['lessons']) ?> aula(s)</span>
+      </div>
+    <?php else: ?>
+    <div class="topic-section topic-section--flat">
+    <?php endif; ?>
+      <ol class="public-lessons">
+        <?php foreach ($group['lessons'] as $l): ?>
+        <?php $globalIndex++; $done = in_array($l['id'], $progress); ?>
+        <li class="public-lesson-item <?= $done ? 'lesson-done' : '' ?>">
+          <?php if ($enrolled): ?>
+          <a href="watch.php?lesson=<?= $l['id'] ?>" class="lesson-link">
+          <?php else: ?>
+          <span class="lesson-link lesson-locked">
+          <?php endif; ?>
+            <span class="lesson-index"><?= $globalIndex ?></span>
+            <span class="lesson-name"><?= htmlspecialchars($l['title']) ?></span>
+            <?php if ($l['duration_seconds']): ?>
+            <span class="lesson-dur"><?= gmdate($l['duration_seconds'] >= 3600 ? 'H:i:s' : 'i:s', $l['duration_seconds']) ?></span>
+            <?php endif; ?>
+            <?php if ($done): ?><span class="lesson-check">✓</span><?php endif; ?>
+            <?php if (!$enrolled): ?><span class="lesson-lock">🔒</span><?php endif; ?>
+          <?php if ($enrolled): ?></a><?php else: ?></span><?php endif; ?>
+        </li>
+        <?php endforeach; ?>
+      </ol>
+    </div><!-- .topic-section -->
+    <?php endforeach; ?>
+
+    <?php else: ?>
+    <!-- Vista plana (sem tópicos) -->
     <ol class="public-lessons">
       <?php foreach ($lessons as $i => $l): ?>
       <?php $done = in_array($l['id'], $progress); ?>
       <li class="public-lesson-item <?= $done ? 'lesson-done' : '' ?>">
         <?php if ($enrolled): ?>
         <a href="watch.php?lesson=<?= $l['id'] ?>" class="lesson-link">
-          <?php else: ?>
-          <span class="lesson-link lesson-locked">
-          <?php endif; ?>
+        <?php else: ?>
+        <span class="lesson-link lesson-locked">
+        <?php endif; ?>
           <span class="lesson-index"><?= $i + 1 ?></span>
           <span class="lesson-name"><?= htmlspecialchars($l['title']) ?></span>
           <?php if ($l['duration_seconds']): ?>
@@ -80,10 +124,11 @@ siteHeader($course['title']);
           <?php endif; ?>
           <?php if ($done): ?><span class="lesson-check">✓</span><?php endif; ?>
           <?php if (!$enrolled): ?><span class="lesson-lock">🔒</span><?php endif; ?>
-          <?php if ($enrolled): ?></a><?php else: ?></span><?php endif; ?>
+        <?php if ($enrolled): ?></a><?php else: ?></span><?php endif; ?>
       </li>
       <?php endforeach; ?>
     </ol>
+    <?php endif; ?>
   </div>
 </div>
 

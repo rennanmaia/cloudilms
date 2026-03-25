@@ -70,14 +70,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $course = $model->getCourseById($id);
                 if (!$course) { $error = 'Curso não encontrado.'; break; }
 
-                $files = $gdrive->getFolderFiles($course['gdrive_folder_id']);
-                if (empty($files)) {
-                    $error = 'Nenhum vídeo encontrado. Verifique se a pasta é pública e a API Key está configurada.';
+                $allFiles   = $gdrive->getFolderFiles($course['gdrive_folder_id']);
+                $folders    = array_values(array_filter($allFiles, fn($f) => $f['mimeType'] === 'application/vnd.google-apps.folder'));
+                $rootVideos = array_values(array_filter($allFiles, fn($f) => str_starts_with($f['mimeType'] ?? '', 'video/')));
+
+                if (empty($allFiles)) {
+                    $error = 'Nenhum arquivo encontrado. Verifique se a pasta é pública e a API Key está configurada.';
                     $action = 'lessons';
                     break;
                 }
-                $added = $model->syncLessons($id, $files);
-                $message = "Sincronização concluída! {$added} nova(s) aula(s) adicionada(s).";
+
+                if (!empty($folders)) {
+                    // Subpastas detectadas → criar como tópicos
+                    $subfolderData = [];
+                    foreach ($folders as $folder) {
+                        $subFiles = $gdrive->getFolderFiles($folder['id']);
+                        $subfolderData[$folder['name']] = $subFiles;
+                    }
+                    $added = $model->syncLessonsWithTopics($id, $rootVideos, $subfolderData);
+                    $tf = count($folders);
+                    $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s). {$tf} subpasta(s) criadas como tópicos.";
+                } else {
+                    $added = $model->syncLessons($id, $allFiles);
+                    $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s).";
+                }
                 $action = 'lessons';
                 break;
 
@@ -88,6 +104,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true]);
+                exit;
+
+            case 'reorder_topic':
+                $orders = $_POST['order'] ?? [];
+                foreach ($orders as $topicId => $order) {
+                    $model->updateTopicOrder((int)$topicId, (int)$order);
+                }
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true]);
+                exit;
+
+            case 'assign_topic':
+                $lessonId = (int)($_POST['lesson_id'] ?? 0);
+                $rawTopic = $_POST['topic_id'] ?? '';
+                $topicId  = ($rawTopic === '' || $rawTopic === '0') ? null : (int)$rawTopic;
+                if ($lessonId) $model->assignLessonToTopic($lessonId, $topicId);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true]);
+                exit;
+
+            case 'save_topic':
+                $topicTitle = trim($_POST['topic_title'] ?? '');
+                $topicId    = (int)($_POST['topic_id'] ?? 0);
+                if (!$topicTitle) { $error = 'Título do tópico é obrigatório.'; $action = 'lessons'; break; }
+                if ($topicId) {
+                    $model->updateTopic($topicId, $topicTitle);
+                    $message = 'Tópico renomeado.';
+                } else {
+                    $existing = $model->getTopicsByCourse($id);
+                    $model->createTopic($id, $topicTitle, count($existing) + 1);
+                    $message = 'Tópico criado.';
+                }
+                header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode($message));
+                exit;
+
+            case 'delete_topic':
+                $topicId = (int)($_POST['topic_id'] ?? 0);
+                if ($topicId) $model->deleteTopic($topicId);
+                header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode('Tópico excluído. Aulas mantidas sem tópico.'));
                 exit;
 
             case 'delete_lesson':
@@ -214,19 +269,24 @@ if ($action === 'lessons') {
     $course = $model->getCourseById($id);
     if (!$course) { header('Location: courses.php'); exit; }
 
-    $lessons = $model->getLessonsByCourse($id);
+    $grouped      = $model->getLessonsGroupedByTopic($id);
+    $topics       = $model->getTopicsByCourse($id);
+    $totalLessons = array_sum(array_map(fn($g) => count($g['lessons']), $grouped));
+
     adminHeader('Aulas: ' . $course['title'], 'courses');
     ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($message): ?><div class="alert alert-success"><?= $message ?></div><?php endif; ?>
 
+    <!-- Drive sync -->
     <div class="card mb-2">
       <div class="card-header">
         <div>
-          <h2>Pasta do Google Drive</h2>
-          <small style="color:#94a3b8">ID: <?= htmlspecialchars($course['gdrive_folder_id']) ?></small>
+          <h2>Pasta Google Drive</h2>
+          <small style="color:#94a3b8">ID: <?= htmlspecialchars($course['gdrive_folder_id']) ?> &mdash;
+            Se a pasta tiver <strong>subpastas</strong>, elas serão criadas automaticamente como tópicos.</small>
         </div>
-        <div style="display:flex;gap:.75rem">
+        <div style="display:flex;gap:.75rem;align-items:center">
           <a href="<?= htmlspecialchars($course['gdrive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-secondary">🔗 Abrir no Drive</a>
           <form method="post" action="courses.php?action=sync&id=<?= $id ?>">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -236,57 +296,182 @@ if ($action === 'lessons') {
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <h2>Aulas (<?= count($lessons) ?>)</h2>
-        <small style="color:#94a3b8">Arraste para reordenar</small>
-      </div>
-      <?php if ($lessons): ?>
-      <ul class="lesson-list" id="lessonList">
-        <?php foreach ($lessons as $i => $l): ?>
-        <li class="lesson-item" data-id="<?= $l['id'] ?>">
-          <span class="drag-handle">⠿</span>
-          <span class="lesson-num"><?= $i + 1 ?></span>
-          <div class="lesson-info">
-            <span class="lesson-title"><?= htmlspecialchars($l['title']) ?></span>
-            <?php if ($l['duration_seconds']): ?>
-            <span class="lesson-duration"><?= gmdate('H:i:s', $l['duration_seconds']) ?></span>
-            <?php endif; ?>
+    <!-- Layout em duas colunas: tópicos | aulas -->
+    <div class="lessons-layout">
+
+      <!-- Painel de tópicos -->
+      <div class="topics-panel">
+        <div class="card">
+          <div class="card-header"><h2>📂 Tópicos (<?= count($topics) ?>)</h2></div>
+
+          <?php if ($topics): ?>
+          <ul class="topic-manage-list" id="topicManageList">
+            <?php foreach ($topics as $t): ?>
+            <li class="topic-manage-item" data-id="<?= $t['id'] ?>">
+              <span class="drag-handle">⠿</span>
+              <span class="topic-manage-title" id="tmt-<?= $t['id'] ?>"><?= htmlspecialchars($t['title']) ?></span>
+              <div class="topic-manage-actions">
+                <button class="btn btn-sm btn-secondary" onclick="editTopic(<?= $t['id'] ?>, this)" title="Renomear">✏️</button>
+                <form method="post" action="courses.php?action=delete_topic&id=<?= $id ?>" style="display:inline"
+                      onsubmit="return confirm('Excluir tópico? As aulas serão mantidas sem tópico.')">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="topic_id" value="<?= $t['id'] ?>">
+                  <button class="btn btn-sm btn-danger" title="Excluir">🗑</button>
+                </form>
+              </div>
+            </li>
+            <?php endforeach; ?>
+          </ul>
+          <?php else: ?>
+          <div style="padding:1.25rem;color:#64748b;font-size:.875rem;text-align:center">
+            Nenhum tópico criado ainda.<br>Use o formulário abaixo ou sincronize uma pasta com subpastas.
           </div>
-          <div class="lesson-actions">
-            <a href="<?= APP_URL ?>/watch.php?lesson=<?= $l['id'] ?>" target="_blank" class="btn btn-sm btn-secondary">▶ Preview</a>
-            <form method="post" action="courses.php?action=delete_lesson&id=<?= $id ?>" style="display:inline" onsubmit="return confirm('Remover esta aula?')">
+          <?php endif; ?>
+
+          <div style="padding:1rem;border-top:1px solid var(--bg3)">
+            <form method="post" action="courses.php?action=save_topic&id=<?= $id ?>" id="newTopicForm">
               <input type="hidden" name="csrf" value="<?= $csrf ?>">
-              <input type="hidden" name="lesson_id" value="<?= $l['id'] ?>">
-              <button class="btn btn-sm btn-danger">🗑</button>
+              <input type="hidden" name="topic_id" value="0" id="editTopicId">
+              <div style="display:flex;gap:.5rem">
+                <input type="text" name="topic_title" id="topicTitleInput" class="form-control" placeholder="Nome do tópico…" required style="flex:1">
+                <button type="submit" class="btn btn-primary" id="topicSaveBtn">+ Criar</button>
+              </div>
+              <button type="button" id="topicCancelBtn" class="btn btn-sm mt-1" style="display:none" onclick="cancelTopicEdit()">Cancelar edição</button>
             </form>
           </div>
-        </li>
-        <?php endforeach; ?>
-      </ul>
-      <?php else: ?>
-      <div style="padding:3rem;text-align:center;color:#64748b">
-        <div style="font-size:3rem;margin-bottom:1rem">📂</div>
-        <p>Nenhuma aula ainda.</p>
-        <p>Clique em <strong>"Sincronizar aulas do Drive"</strong> para importar automaticamente os vídeos da pasta.</p>
+        </div>
       </div>
-      <?php endif; ?>
-    </div>
 
-    <div style="margin-top:1rem">
+      <!-- Painel de aulas -->
+      <div class="lessons-panel">
+        <div class="card">
+          <div class="card-header">
+            <h2>▶ Aulas (<?= $totalLessons ?>)</h2>
+            <small style="color:#94a3b8">Arraste para reordenar dentro do tópico</small>
+          </div>
+
+          <?php if ($totalLessons > 0): ?>
+          <div class="grouped-lessons">
+            <?php foreach ($grouped as $group): ?>
+            <?php $topicData = $group['topic']; $groupLessons = $group['lessons']; ?>
+
+            <?php if ($topicData): ?>
+            <div class="topic-group" <?= $topicData['id'] ? 'data-topic-id="' . $topicData['id'] . '"' : '' ?>>
+              <div class="topic-group-header">
+                <span class="topic-group-icon">📁</span>
+                <span class="topic-group-title"><?= htmlspecialchars($topicData['title']) ?></span>
+                <span class="topic-group-count"><?= count($groupLessons) ?> aula(s)</span>
+              </div>
+            <?php else: ?>
+            <div class="topic-group" data-topic-id="0">
+              <div class="topic-group-header topic-group-header--none">
+                <span class="topic-group-icon">📄</span>
+                <span class="topic-group-title">Sem tópico</span>
+                <span class="topic-group-count"><?= count($groupLessons) ?> aula(s)</span>
+              </div>
+            <?php endif; ?>
+
+              <ul class="lesson-list lesson-sublist" data-topic="<?= $topicData['id'] ?? '0' ?>">
+                <?php foreach ($groupLessons as $i => $l): ?>
+                <li class="lesson-item" data-id="<?= $l['id'] ?>">
+                  <span class="drag-handle">⠿</span>
+                  <span class="lesson-num"><?= $i + 1 ?></span>
+                  <div class="lesson-info">
+                    <span class="lesson-title"><?= htmlspecialchars($l['title']) ?></span>
+                    <?php if ($l['duration_seconds']): ?>
+                    <span class="lesson-duration"><?= gmdate('H:i:s', $l['duration_seconds']) ?></span>
+                    <?php endif; ?>
+                  </div>
+                  <!-- Mover para tópico -->
+                  <select class="topic-assign-select" data-lesson="<?= $l['id'] ?>" onchange="assignTopic(this)"
+                          title="Mover para tópico">
+                    <option value="">— Sem tópico —</option>
+                    <?php foreach ($topics as $t): ?>
+                    <option value="<?= $t['id'] ?>" <?= (int)$l['topic_id'] === (int)$t['id'] ? 'selected' : '' ?>>
+                      <?= htmlspecialchars($t['title']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                  </select>
+                  <div class="lesson-actions">
+                    <a href="<?= APP_URL ?>/watch.php?lesson=<?= $l['id'] ?>" target="_blank" class="btn btn-sm btn-secondary">▶</a>
+                    <form method="post" action="courses.php?action=delete_lesson&id=<?= $id ?>" style="display:inline" onsubmit="return confirm('Remover esta aula?')">
+                      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                      <input type="hidden" name="lesson_id" value="<?= $l['id'] ?>">
+                      <button class="btn btn-sm btn-danger">🗑</button>
+                    </form>
+                  </div>
+                </li>
+                <?php endforeach; ?>
+              </ul>
+            </div><!-- .topic-group -->
+            <?php endforeach; ?>
+          </div>
+
+          <?php else: ?>
+          <div style="padding:3rem;text-align:center;color:#64748b">
+            <div style="font-size:3rem;margin-bottom:1rem">📂</div>
+            <p>Nenhuma aula ainda.</p>
+            <p>Clique em <strong>"Sincronizar aulas do Drive"</strong> para importar automaticamente.</p>
+          </div>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div><!-- .lessons-layout -->
+
+    <div style="margin-top:1rem;display:flex;gap:.75rem">
       <a href="courses.php?action=edit&id=<?= $id ?>" class="btn">← Editar curso</a>
       <a href="<?= APP_URL ?>/course.php?slug=<?= urlencode($course['slug']) ?>" target="_blank" class="btn btn-secondary">🌐 Ver página do curso</a>
     </div>
 
     <script>
-    // Drag and drop para reordenar
-    const list = document.getElementById('lessonList');
-    if (list) {
+    const COURSE_ID = <?= $id ?>;
+    const CSRF      = '<?= $csrf ?>';
+
+    // ── Atribuir tópico via AJAX ──────────────────────────────────────────
+    function assignTopic(sel) {
+        const lessonId = sel.dataset.lesson;
+        const topicId  = sel.value;
+        const form = new FormData();
+        form.append('csrf', CSRF);
+        form.append('lesson_id', lessonId);
+        form.append('topic_id', topicId);
+        fetch(`courses.php?action=assign_topic&id=${COURSE_ID}`, {method:'POST', body:form})
+            .then(r => r.json())
+            .then(d => { if (d.ok) { sel.closest('.topic-group').querySelectorAll('.lesson-num'); location.reload(); }});
+    }
+
+    // ── Editar tópico inline ──────────────────────────────────────────────
+    function editTopic(topicId, btn) {
+        const span  = document.getElementById('tmt-' + topicId);
+        const input = document.getElementById('topicTitleInput');
+        const hidId = document.getElementById('editTopicId');
+        const saveBtn = document.getElementById('topicSaveBtn');
+        const cancelBtn = document.getElementById('topicCancelBtn');
+        input.value      = span.textContent.trim();
+        hidId.value      = topicId;
+        saveBtn.textContent = '💾 Salvar';
+        cancelBtn.style.display = 'inline-flex';
+        input.focus();
+        input.select();
+    }
+    function cancelTopicEdit() {
+        document.getElementById('editTopicId').value   = '0';
+        document.getElementById('topicTitleInput').value = '';
+        document.getElementById('topicSaveBtn').textContent = '+ Criar';
+        document.getElementById('topicCancelBtn').style.display = 'none';
+    }
+
+    // ── Drag & drop dentro de cada tópico ────────────────────────────────
+    document.querySelectorAll('.lesson-sublist').forEach(list => {
         let dragging = null;
         list.querySelectorAll('.lesson-item').forEach(item => {
             item.draggable = true;
-            item.addEventListener('dragstart', e => { dragging = item; item.classList.add('dragging'); });
-            item.addEventListener('dragend', () => { dragging = null; item.classList.remove('dragging'); saveOrder(); });
+            item.addEventListener('dragstart', () => { dragging = item; item.classList.add('dragging'); });
+            item.addEventListener('dragend',   () => {
+                item.classList.remove('dragging');
+                dragging = null;
+                saveOrder(list);
+            });
             item.addEventListener('dragover', e => {
                 e.preventDefault();
                 const after = getDragAfter(list, e.clientY);
@@ -295,21 +480,53 @@ if ($action === 'lessons') {
             });
         });
         function getDragAfter(container, y) {
-            const items = [...container.querySelectorAll('.lesson-item:not(.dragging)')];
-            return items.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                return (offset < 0 && offset > (closest.offset ?? -Infinity)) ? {offset, element: child} : closest;
-            }, {}).element;
+            return [...container.querySelectorAll('.lesson-item:not(.dragging)')]
+                .reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = y - box.top - box.height / 2;
+                    return (offset < 0 && offset > (closest.offset ?? -Infinity)) ? {offset, element: child} : closest;
+                }, {}).element;
         }
-        function saveOrder() {
+        function saveOrder(list) {
             const items = list.querySelectorAll('.lesson-item');
             items.forEach((item, idx) => { item.querySelector('.lesson-num').textContent = idx + 1; });
             const data = new FormData();
             items.forEach((item, idx) => data.append(`order[${item.dataset.id}]`, idx + 1));
-            data.append('csrf', '<?= $csrf ?>');
-            fetch('courses.php?action=reorder&id=<?= $id ?>', {method:'POST', body:data});
+            data.append('csrf', CSRF);
+            fetch(`courses.php?action=reorder&id=${COURSE_ID}`, {method:'POST', body:data});
         }
+    });
+
+    // ── Drag & drop dos tópicos ───────────────────────────────────────────
+    const topicManageList = document.getElementById('topicManageList');
+    if (topicManageList) {
+        let dragging = null;
+        topicManageList.querySelectorAll('.topic-manage-item').forEach(item => {
+            item.draggable = true;
+            item.addEventListener('dragstart', () => { dragging = item; item.classList.add('dragging'); });
+            item.addEventListener('dragend',   () => {
+                item.classList.remove('dragging');
+                dragging = null;
+                const data = new FormData();
+                topicManageList.querySelectorAll('.topic-manage-item').forEach((it, idx) => {
+                    data.append(`order[${it.dataset.id}]`, idx + 1);
+                });
+                data.append('csrf', CSRF);
+                fetch(`courses.php?action=reorder_topic&id=${COURSE_ID}`, {method:'POST', body:data})
+                    .then(() => location.reload());
+            });
+            item.addEventListener('dragover', e => {
+                e.preventDefault();
+                const after = [...topicManageList.querySelectorAll('.topic-manage-item:not(.dragging)')]
+                    .reduce((closest, child) => {
+                        const box = child.getBoundingClientRect();
+                        const offset = e.clientY - box.top - box.height / 2;
+                        return (offset < 0 && offset > (closest.offset ?? -Infinity)) ? {offset, element: child} : closest;
+                    }, {}).element;
+                if (!after) topicManageList.appendChild(dragging);
+                else topicManageList.insertBefore(dragging, after);
+            });
+        });
     }
     </script>
     <?php

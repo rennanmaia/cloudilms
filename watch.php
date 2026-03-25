@@ -30,6 +30,8 @@ if (!$enrolled) {
 }
 
 $lessons  = $model->getLessonsByCourse($course['id']);
+$grouped  = $model->getLessonsGroupedByTopic($course['id']);
+$hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
 $progress = $model->getProgress($userId, $course['id']);
 
 // Marca como concluído via AJAX
@@ -69,16 +71,38 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
       </div>
     </div>
     <ol class="watch-lesson-list">
-      <?php foreach ($lessons as $i => $l): ?>
-      <?php $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; ?>
-      <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?>">
-        <a href="watch.php?lesson=<?= $l['id'] ?>">
-          <span class="wl-index"><?= $i + 1 ?></span>
-          <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
-          <?php if ($done): ?><span class="wl-check">✓</span><?php endif; ?>
-        </a>
-      </li>
-      <?php endforeach; ?>
+      <?php if ($hasTopics): ?>
+        <?php $lessonNum = 0; ?>
+        <?php foreach ($grouped as $group): ?>
+          <?php if ($group['topic']): ?>
+          <li class="watch-topic-header">
+            <span>📁 <?= htmlspecialchars($group['topic']['title']) ?></span>
+            <span class="wth-count"><?= count($group['lessons']) ?></span>
+          </li>
+          <?php endif; ?>
+          <?php foreach ($group['lessons'] as $l): ?>
+          <?php $lessonNum++; $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; ?>
+          <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?> <?= $group['topic'] ? 'indented' : '' ?>">
+            <a href="watch.php?lesson=<?= $l['id'] ?>">
+              <span class="wl-index"><?= $lessonNum ?></span>
+              <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
+              <?php if ($done): ?><span class="wl-check">✓</span><?php endif; ?>
+            </a>
+          </li>
+          <?php endforeach; ?>
+        <?php endforeach; ?>
+      <?php else: ?>
+        <?php foreach ($lessons as $i => $l): ?>
+        <?php $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; ?>
+        <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?>">
+          <a href="watch.php?lesson=<?= $l['id'] ?>">
+            <span class="wl-index"><?= $i + 1 ?></span>
+            <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
+            <?php if ($done): ?><span class="wl-check">✓</span><?php endif; ?>
+          </a>
+        </li>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </ol>
   </aside>
 

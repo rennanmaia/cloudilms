@@ -28,10 +28,20 @@ CREATE TABLE IF NOT EXISTS `courses` (
     `created_at`         DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Tópicos (módulos) do curso
+CREATE TABLE IF NOT EXISTS `topics` (
+    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `course_id`  INT UNSIGNED NOT NULL,
+    `title`      VARCHAR(255) NOT NULL,
+    `sort_order` INT UNSIGNED NOT NULL DEFAULT 0,
+    FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Aulas
 CREATE TABLE IF NOT EXISTS `lessons` (
     `id`               INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `course_id`        INT UNSIGNED NOT NULL,
+    `topic_id`         INT UNSIGNED NULL,
     `title`            VARCHAR(255) NOT NULL,
     `gdrive_file_id`   VARCHAR(200) NOT NULL,
     `mime_type`        VARCHAR(100),
@@ -39,6 +49,7 @@ CREATE TABLE IF NOT EXISTS `lessons` (
     `sort_order`       INT UNSIGNED NOT NULL DEFAULT 0,
     `created_at`       DATETIME NOT NULL,
     FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON DELETE CASCADE,
+    FOREIGN KEY (`topic_id`)  REFERENCES `topics`(`id`)  ON DELETE SET NULL,
     UNIQUE KEY `unique_lesson` (`course_id`, `gdrive_file_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

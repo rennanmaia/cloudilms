@@ -216,6 +216,33 @@ a:hover { color: var(--primary2); }
 .progress-mini-fill  { height: 100%; background: var(--primary); border-radius: 99px; }
 .progress-mini-wrap span { font-size: .75rem; color: var(--text3); }
 
+/* ── Topic sections (course page) ──────────── */
+.topic-section { margin-bottom: 1.5rem; }
+.topic-section-header {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .5rem .75rem; background: var(--bg3);
+  border-radius: .375rem; margin-bottom: .5rem;
+  cursor: default;
+}
+.topic-section-icon { font-size: 1rem; }
+.topic-section-title { font-weight: 600; font-size: .95rem; flex: 1; }
+.topic-section-count { font-size: .8rem; color: var(--text3); }
+
+/* ── Watch sidebar topics ───────────────────── */
+.watch-topic-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .4rem .75rem; background: var(--bg3);
+  font-size: .8rem; font-weight: 600; color: var(--text2);
+  list-style: none; cursor: default;
+  border-top: 1px solid rgba(255,255,255,.06);
+}
+.watch-topic-header:first-child { border-top: none; }
+.wth-count {
+  font-size: .72rem; background: rgba(255,255,255,.1);
+  border-radius: 99px; padding: .1rem .45rem; color: var(--text3);
+}
+.watch-lesson-item.indented a { padding-left: 1.6rem; }
+
 /* ── Empty state ────────────────────────────── */
 .empty-state { text-align: center; padding: 5rem 2rem; }
 .empty-icon  { font-size: 4rem; margin-bottom: 1rem; }
