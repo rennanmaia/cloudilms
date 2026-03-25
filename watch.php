@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/googledrive.php';
+require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
@@ -54,10 +55,23 @@ if (isset($lockedIds[$lessonId])) {
     exit;
 }
 
+// Log de visualização da aula
+ActivityLog::record('lesson_view', [
+    'entity_type'  => 'lesson',
+    'entity_id'    => $lessonId,
+    'entity_title' => $lesson['title'],
+]);
+
 // Marca como concluído via AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
     if (in_array($_POST['lesson_id'] ?? '', array_column($lessons, 'id'))) {
-        $model->markComplete($userId, $course['id'], (int)$_POST['lesson_id']);
+        $completedLessonId = (int)$_POST['lesson_id'];
+        $model->markComplete($userId, $course['id'], $completedLessonId);
+        ActivityLog::record('lesson_complete', [
+            'entity_type'  => 'lesson',
+            'entity_id'    => $completedLessonId,
+            'entity_title' => $lesson['title'],
+        ]);
         header('Content-Type: application/json');
         $total    = count($lessons);
         $done     = count($model->getProgress($userId, $course['id']));

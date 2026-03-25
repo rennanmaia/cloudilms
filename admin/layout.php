@@ -35,6 +35,9 @@ function adminHeader(string $title, string $activePage = ''): void {
       <a href="<?= $appUrl ?>/admin/settings.php" class="nav-item <?= $activePage==='settings'?'active':'' ?>">
         <span class="nav-icon">⚙️</span> Configurações
       </a>
+      <a href="<?= $appUrl ?>/admin/audit.php" class="nav-item <?= $activePage==='audit'?'active':'' ?>">
+        <span class="nav-icon">🔎</span> Auditoria
+      </a>
       <div class="nav-divider"></div>
       <a href="<?= $appUrl ?>/index.php" class="nav-item" target="_blank">
         <span class="nav-icon">🌐</span> Ver site
@@ -63,6 +66,32 @@ function adminFooter(): void {
   </main>
 </div><!-- .layout -->
 <script src="<?= defined('APP_URL') ? APP_URL : '' ?>/assets/js/admin.js"></script>
+<script>
+(function () {
+  var API = '<?= defined("APP_URL") ? APP_URL : "" ?>/api/log.php';
+  var t0  = Date.now(), lid = null;
+  fetch(API, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'page_view', url: location.href, title: document.title})
+  }).then(function (r) { return r.json(); })
+    .then(function (d) { if (d.ok) lid = d.id; })
+    .catch(function () {});
+
+  function beacon() {
+    if (!lid) return;
+    var s = Math.round((Date.now() - t0) / 1000);
+    if (s < 1) return;
+    navigator.sendBeacon(API, new Blob(
+      [JSON.stringify({action: 'time_on_page', log_id: lid, seconds: s})],
+      {type: 'application/json'}
+    ));
+    lid = null;
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) beacon(); });
+  window.addEventListener('pagehide', beacon);
+})();
+</script>
 </body>
 </html>
     <?php

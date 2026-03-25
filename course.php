@@ -5,6 +5,7 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
+require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
@@ -26,8 +27,22 @@ $progress = $enrolled ? $model->getProgress((int)$_SESSION['user_id'], $course['
 // Matrícula automática ao clicar em "começar"
 if ($logged && isset($_GET['enroll'])) {
     $model->enroll((int)$_SESSION['user_id'], $course['id']);
+    ActivityLog::record('course_enroll', [
+        'entity_type'  => 'course',
+        'entity_id'    => $course['id'],
+        'entity_title' => $course['title'],
+    ]);
     header('Location: course.php?slug=' . urlencode($slug));
     exit;
+}
+
+// Log de visita ao curso
+if ($logged) {
+    ActivityLog::record('course_view', [
+        'entity_type'  => 'course',
+        'entity_id'    => $course['id'],
+        'entity_title' => $course['title'],
+    ]);
 }
 
 siteHeader($course['title']);

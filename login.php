@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
+require_once __DIR__ . '/includes/database.php';
+require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth = new Auth();
@@ -17,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim($_POST['email'] ?? '');
         $pass  = $_POST['password'] ?? '';
         if ($auth->login($email, $pass)) {
+            ActivityLog::record('login');
             $redirect = $_GET['redirect'] ?? '';
             // Valida redirect para evitar open redirect
             if ($redirect && str_starts_with($redirect, APP_URL)) {
@@ -29,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             exit;
         }
         $error = 'E-mail ou senha inválidos.';
+        ActivityLog::record('login_failed', ['meta' => ['email' => $email]]);
     }
 }
 

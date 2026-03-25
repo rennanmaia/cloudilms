@@ -51,8 +51,34 @@ function siteFooter(): void {
   <div class="container">
     <p>© <?= date('Y') ?> <?= htmlspecialchars($appName) ?> &mdash; Plataforma de Cursos Online</p>
   </div>
-</footer>
-</body>
+</footer><?php if (!empty($_SESSION['user_id'])): ?>
+<script>
+(function () {
+  var API = '<?= $appUrl ?>/api/log.php';
+  var t0  = Date.now(), lid = null;
+  fetch(API, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action: 'page_view', url: location.href, title: document.title})
+  }).then(function (r) { return r.json(); })
+    .then(function (d) { if (d.ok) lid = d.id; })
+    .catch(function () {});
+
+  function beacon() {
+    if (!lid) return;
+    var s = Math.round((Date.now() - t0) / 1000);
+    if (s < 1) return;
+    navigator.sendBeacon(API, new Blob(
+      [JSON.stringify({action: 'time_on_page', log_id: lid, seconds: s})],
+      {type: 'application/json'}
+    ));
+    lid = null;
+  }
+  document.addEventListener('visibilitychange', function () { if (document.hidden) beacon(); });
+  window.addEventListener('pagehide', beacon);
+})();
+</script>
+<?php endif; ?></body>
 </html>
 <?php
 }
