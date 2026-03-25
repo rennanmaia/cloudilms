@@ -404,13 +404,13 @@ if ($action === 'lessons') {
                   <div class="lesson-settings" data-id="<?= $l['id'] ?>">
                     <button class="btn btn-sm lesson-toggle-btn <?= $l['prevent_seek']     ? 'active' : '' ?>"
                             data-field="prevent_seek"
-                            title="Bloquear avanço do vídeo"
+                            title="<?= $l['prevent_seek'] ? '✅ Avanço bloqueado — clique para desativar' : 'Bloquear avanço do vídeo (desativado)' ?>"
                             onclick="toggleSetting(this)">
                       ⏩
                     </button>
                     <button class="btn btn-sm lesson-toggle-btn <?= $l['force_sequential'] ? 'active' : '' ?>"
                             data-field="force_sequential"
-                            title="Exige conclusão da aula anterior"
+                            title="<?= $l['force_sequential'] ? '✅ Sequencial obrigatório — clique para desativar' : 'Exige conclusão da aula anterior (desativado)' ?>"
                             onclick="toggleSetting(this)">
                       🔒
                     </button>
