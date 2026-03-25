@@ -252,6 +252,12 @@ class CourseModel {
         $this->db->prepare('UPDATE lessons SET sort_order = ? WHERE id = ?')->execute([$order, $lessonId]);
     }
 
+    public function updateLessonSettings(int $lessonId, int $preventSeek, int $forceSequential): void {
+        $this->db->prepare(
+            'UPDATE lessons SET prevent_seek = ?, force_sequential = ? WHERE id = ?'
+        )->execute([$preventSeek, $forceSequential, $lessonId]);
+    }
+
     public function deleteLesson(int $id): void {
         $this->db->prepare('DELETE FROM lessons WHERE id = ?')->execute([$id]);
     }

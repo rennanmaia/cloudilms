@@ -34,6 +34,26 @@ $grouped  = $model->getLessonsGroupedByTopic($course['id']);
 $hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
 $progress = $model->getProgress($userId, $course['id']);
 
+// Flags da aula atual (por aula)
+$forceSequential = !empty($lesson['force_sequential']);
+$preventSeek     = !empty($lesson['prevent_seek']);
+
+// Pre-calcula quais aulas estão bloqueadas:
+// Aula N está bloqueada se ela tem force_sequential=1 e a aula N-1 não foi concluída.
+$lessonIds = array_column($lessons, 'id');
+$lockedIds = [];
+foreach ($lessons as $i => $l) {
+    if (!empty($l['force_sequential']) && $i > 0 && !in_array($lessons[$i - 1]['id'], $progress)) {
+        $lockedIds[$l['id']] = true;
+    }
+}
+
+// Bloqueia acesso direto a aula bloqueada
+if (isset($lockedIds[$lessonId])) {
+    header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($course['slug']) . '&notice=sequential');
+    exit;
+}
+
 // Marca como concluído via AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
     if (in_array($_POST['lesson_id'] ?? '', array_column($lessons, 'id'))) {
@@ -81,25 +101,41 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
           </li>
           <?php endif; ?>
           <?php foreach ($group['lessons'] as $l): ?>
-          <?php $lessonNum++; $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; ?>
-          <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?> <?= $group['topic'] ? 'indented' : '' ?>">
+          <?php $lessonNum++; $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; $locked = isset($lockedIds[$l['id']]); ?>
+          <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?> <?= $group['topic'] ? 'indented' : '' ?> <?= $locked ? 'locked' : '' ?>">
+            <?php if ($locked): ?>
+              <span class="wl-lock-wrap">
+                <span class="wl-index"><?= $lessonNum ?></span>
+                <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
+                <span class="wl-lock">🔒</span>
+              </span>
+            <?php else: ?>
             <a href="watch.php?lesson=<?= $l['id'] ?>">
               <span class="wl-index"><?= $lessonNum ?></span>
               <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
               <?php if ($done): ?><span class="wl-check">✓</span><?php endif; ?>
             </a>
+            <?php endif; ?>
           </li>
           <?php endforeach; ?>
         <?php endforeach; ?>
       <?php else: ?>
         <?php foreach ($lessons as $i => $l): ?>
-        <?php $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; ?>
-        <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?>">
+        <?php $done = in_array($l['id'], $progress); $active = $l['id'] == $lessonId; $locked = isset($lockedIds[$l['id']]); ?>
+        <li class="watch-lesson-item <?= $active ? 'active' : '' ?> <?= $done ? 'done' : '' ?> <?= $locked ? 'locked' : '' ?>">
+          <?php if ($locked): ?>
+            <span class="wl-lock-wrap">
+              <span class="wl-index"><?= $i + 1 ?></span>
+              <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
+              <span class="wl-lock">🔒</span>
+            </span>
+          <?php else: ?>
           <a href="watch.php?lesson=<?= $l['id'] ?>">
             <span class="wl-index"><?= $i + 1 ?></span>
             <span class="wl-title"><?= htmlspecialchars($l['title']) ?></span>
             <?php if ($done): ?><span class="wl-check">✓</span><?php endif; ?>
           </a>
+          <?php endif; ?>
         </li>
         <?php endforeach; ?>
       <?php endif; ?>
@@ -108,14 +144,19 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
 
   <!-- Player principal -->
   <div class="watch-main">
-    <div class="video-container">
-      <iframe src="<?= htmlspecialchars($embedUrl) ?>"
+    <div class="video-container" id="videoContainer">
+      <iframe id="lessonIframe"
+              src="<?= htmlspecialchars($embedUrl) ?>"
               width="100%" height="100%"
               frameborder="0"
               allow="autoplay"
               allowfullscreen
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
       ></iframe>
+      <?php if ($preventSeek): ?>
+      <!-- Bloqueia apenas a barra de progresso do player do Drive (região inferior) -->
+      <div id="seekBlocker" class="seek-blocker" title="Avançar o vídeo está desabilitado"></div>
+      <?php endif; ?>
     </div>
 
     <div class="watch-controls">
@@ -146,25 +187,117 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
 </div>
 
 <script>
+/* ── Configurações vindas do servidor ────────────────── */
+const LESSON_ID       = <?= $lessonId ?>;
+const LESSON_DURATION = <?= (int)($lesson['duration_seconds'] ?? 0) ?>;  // segundos
+const PREVENT_SEEK    = <?= $preventSeek     ? 'true' : 'false' ?>;
+const ALREADY_DONE    = <?= in_array($lessonId, $progress) ? 'true' : 'false' ?>;
+
+/* ── Referências DOM ─────────────────────────────────── */
+const iframe    = document.getElementById('lessonIframe');
+const markBtn   = document.getElementById('markBtn');
+const blocker   = document.getElementById('seekBlocker'); // pode ser null
+
+const iframeSrc = iframe ? iframe.src : '';
+
+/* ── Estado do player ────────────────────────────────── */
+let markedComplete = ALREADY_DONE;
+let activeSeconds  = 0;
+let ticker         = null;
+let paused         = false;  // pausa forçada por visibilidade
+
+/* ── Controle de tempo assistido ─────────────────────── */
+function startTicker() {
+    if (ticker || markedComplete) return;
+    ticker = setInterval(() => {
+        activeSeconds++;
+        checkAutoComplete();
+    }, 1000);
+}
+
+function stopTicker() {
+    if (ticker) { clearInterval(ticker); ticker = null; }
+}
+
+function checkAutoComplete() {
+    if (markedComplete || !PREVENT_SEEK) return;
+    if (!LESSON_DURATION) return; // sem duração cadastrada → só o botão manual
+    const threshold = Math.max(1, LESSON_DURATION - 10);
+    if (activeSeconds >= threshold) {
+        autoMarkComplete();
+    }
+}
+
+function autoMarkComplete() {
+    if (markedComplete) return;
+    markedComplete = true;
+    stopTicker();
+    if (markBtn && !markBtn.classList.contains('btn-done')) {
+        markComplete(markBtn);
+    }
+}
+
+/* ── Pausar quando tela/aba ficar inativa ────────────── */
+function pauseVideo() {
+    if (paused || !iframe) return;
+    paused = true;
+    stopTicker();
+    // Tenta pausar via postMessage (Google Drive player)
+    try {
+        iframe.contentWindow.postMessage('{"action":"pauseVideo"}', 'https://drive.google.com');
+    } catch (_) {}
+    // Fallback: remove src para garantir que o áudio também pare
+    iframe.dataset.src = iframe.src;
+    iframe.src = '';
+}
+
+function resumeVideo() {
+    if (!paused || !iframe) return;
+    paused = false;
+    if (iframe.dataset.src) {
+        iframe.src = iframe.dataset.src;
+        delete iframe.dataset.src;
+    }
+    setTimeout(startTicker, 800); // aguarda iframe recarregar antes de contar
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        pauseVideo();
+    } else {
+        resumeVideo();
+    }
+});
+
+/* ── Inicializa o ticker ao carregar ─────────────────── */
+if (!markedComplete) {
+    startTicker();
+}
+
+/* ── Marcar como concluída (manual ou automática) ──────── */
 function markComplete(btn) {
-    const lessonId = btn.dataset.lesson;
+    const lid = btn ? btn.dataset.lesson : LESSON_ID;
     const form = new FormData();
     form.append('mark_complete', '1');
-    form.append('lesson_id', lessonId);
+    form.append('lesson_id', lid);
 
-    fetch('watch.php?lesson=' + lessonId, {method: 'POST', body: form})
+    fetch('watch.php?lesson=' + lid, {method: 'POST', body: form})
         .then(r => r.json())
         .then(data => {
             if (data.ok) {
-                btn.textContent = '✅ Concluída';
-                btn.classList.add('btn-done');
+                markedComplete = true;
+                stopTicker();
+                if (btn) {
+                    btn.textContent = '✅ Concluída';
+                    btn.classList.add('btn-done');
+                }
                 const bar = document.getElementById('progressBar');
                 const lbl = document.getElementById('progressLabel');
                 if (bar) bar.style.width = data.progress + '%';
                 if (lbl) lbl.textContent = data.progress + '% concluído';
-                // Marca item da lista
-                const items = document.querySelectorAll('.watch-lesson-item.active');
-                items.forEach(i => i.classList.add('done'));
+                // Marca item da lista como concluído
+                document.querySelectorAll('.watch-lesson-item.active')
+                        .forEach(i => i.classList.add('done'));
             }
         });
 }

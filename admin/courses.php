@@ -145,6 +145,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode('Tópico excluído. Aulas mantidas sem tópico.'));
                 exit;
 
+            case 'lesson_settings':
+                $lessonId        = (int)($_POST['lesson_id'] ?? 0);
+                $preventSeek     = (int)(bool)($_POST['prevent_seek']     ?? 0);
+                $forceSequential = (int)(bool)($_POST['force_sequential'] ?? 0);
+                if ($lessonId) $model->updateLessonSettings($lessonId, $preventSeek, $forceSequential);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true]);
+                exit;
+
             case 'delete_lesson':
                 $lessonId = (int)($_POST['lesson_id'] ?? 0);
                 if ($lessonId) $model->deleteLesson($lessonId);
@@ -392,6 +401,20 @@ if ($action === 'lessons') {
                     </option>
                     <?php endforeach; ?>
                   </select>
+                  <div class="lesson-settings" data-id="<?= $l['id'] ?>">
+                    <button class="btn btn-sm lesson-toggle-btn <?= $l['prevent_seek']     ? 'active' : '' ?>"
+                            data-field="prevent_seek"
+                            title="Bloquear avanço do vídeo"
+                            onclick="toggleSetting(this)">
+                      ⏩
+                    </button>
+                    <button class="btn btn-sm lesson-toggle-btn <?= $l['force_sequential'] ? 'active' : '' ?>"
+                            data-field="force_sequential"
+                            title="Exige conclusão da aula anterior"
+                            onclick="toggleSetting(this)">
+                      🔒
+                    </button>
+                  </div>
                   <div class="lesson-actions">
                     <a href="<?= APP_URL ?>/watch.php?lesson=<?= $l['id'] ?>" target="_blank" class="btn btn-sm btn-secondary">▶</a>
                     <form method="post" action="courses.php?action=delete_lesson&id=<?= $id ?>" style="display:inline" onsubmit="return confirm('Remover esta aula?')">
@@ -459,6 +482,40 @@ if ($action === 'lessons') {
         document.getElementById('topicTitleInput').value = '';
         document.getElementById('topicSaveBtn').textContent = '+ Criar';
         document.getElementById('topicCancelBtn').style.display = 'none';
+    }
+
+    // ── Toggles por aula (prevent_seek / force_sequential) ─────────────
+    function toggleSetting(btn) {
+        const wrap    = btn.closest('.lesson-settings');
+        const lessonId = wrap.dataset.id;
+        const field    = btn.dataset.field;
+
+        // Lê estado atual dos dois botões deste item
+        const allBtns = wrap.querySelectorAll('.lesson-toggle-btn');
+        let preventSeek     = 0;
+        let forceSequential = 0;
+        allBtns.forEach(b => {
+            const val = b === btn ? (b.classList.contains('active') ? 0 : 1) : (b.classList.contains('active') ? 1 : 0);
+            if (b.dataset.field === 'prevent_seek')     preventSeek     = val;
+            if (b.dataset.field === 'force_sequential') forceSequential = val;
+        });
+
+        const form = new FormData();
+        form.append('csrf', CSRF);
+        form.append('lesson_id',        lessonId);
+        form.append('prevent_seek',     preventSeek);
+        form.append('force_sequential', forceSequential);
+
+        fetch(`courses.php?action=lesson_settings&id=${COURSE_ID}`, {method:'POST', body:form})
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    btn.classList.toggle('active');
+                    btn.title = btn.classList.contains('active')
+                        ? (field === 'prevent_seek' ? '✅ Avanço bloqueado — clique para desativar' : '✅ Sequencial ativo — clique para desativar')
+                        : (field === 'prevent_seek' ? 'Bloquear avanço do vídeo' : 'Exige conclusão da aula anterior');
+                }
+            });
     }
 
     // ── Drag & drop dentro de cada tópico ────────────────────────────────

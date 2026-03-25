@@ -243,6 +243,25 @@ a:hover { color: var(--primary2); }
 }
 .watch-lesson-item.indented a { padding-left: 1.6rem; }
 
+/* ── Aula bloqueada (modo sequencial) ──────────── */
+.watch-lesson-item.locked { opacity: .5; cursor: default; }
+.watch-lesson-item.locked .wl-lock-wrap {
+  display: flex; align-items: flex-start; gap: .5rem;
+  padding: .55rem .75rem; width: 100%; box-sizing: border-box;
+}
+.wl-lock { font-size: .8rem; margin-top: .1rem; }
+
+/* ── Bloqueador de seek (barra inferior do player) ── */
+.video-container { position: relative; flex: 1; background: #000; min-height: 0; }
+.seek-blocker {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 58px;           /* altura aproximada dos controles do Drive */
+  z-index: 5;
+  cursor: not-allowed;
+  /* transparente — só bloqueia eventos de mouse na região da barra */
+}
+
 /* ── Empty state ────────────────────────────── */
 .empty-state { text-align: center; padding: 5rem 2rem; }
 .empty-icon  { font-size: 4rem; margin-bottom: 1rem; }

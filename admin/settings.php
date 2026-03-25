@@ -22,6 +22,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $allowReg    = isset($_POST['allow_registration']) ? '1' : '0';
         $testFolder  = trim($_POST['test_folder'] ?? '');
 
+        $forceSequential = isset($_POST['force_sequential']) ? '1' : '0';
+        $preventSeek     = isset($_POST['prevent_seek'])     ? '1' : '0';
+
         // Salva no banco (API key criptografada)
         $save = $db->prepare('INSERT INTO settings (key_name, value) VALUES (?,?) ON DUPLICATE KEY UPDATE value=?');
         $save->execute(['site_name'         , $siteName              , $siteName]);

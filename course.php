@@ -33,6 +33,12 @@ if ($logged && isset($_GET['enroll'])) {
 siteHeader($course['title']);
 ?>
 
+<?php if (($_GET['notice'] ?? '') === 'sequential'): ?>
+<div class="alert alert-danger" style="margin:1rem auto;max-width:860px">
+  🔒 Você precisa concluir as aulas anteriores antes de acessar esta aula.
+</div>
+<?php endif; ?>
+
 <div class="course-page">
   <!-- Header do curso -->
   <div class="course-hero">
