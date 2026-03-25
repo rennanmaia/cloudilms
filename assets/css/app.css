@@ -266,6 +266,14 @@ a:hover { color: var(--primary2); }
   cursor: not-allowed;
   /* transparente — só bloqueia eventos de mouse na região da barra */
 }
+/* Cobre o botão de atalho para o Google Drive (canto superior direito) */
+.gdrive-link-blocker {
+  position: absolute;
+  top: 0; right: 0;
+  width: 60px; height: 50px;
+  z-index: 5;
+  background: #000;
+}
 
 /* ── Empty state ────────────────────────────── */
 .empty-state { text-align: center; padding: 5rem 2rem; }

@@ -177,6 +177,8 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
               allowfullscreen
               sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
       ></iframe>
+      <!-- Cobre o botão de link externo do Google Drive (canto superior direito) -->
+      <div class="gdrive-link-blocker"></div>
       <?php if ($preventSeek): ?>
       <!-- Bloqueia apenas a barra de progresso do player do Drive (região inferior) -->
       <div id="seekBlocker" class="seek-blocker" title="Avançar o vídeo está desabilitado"></div>
