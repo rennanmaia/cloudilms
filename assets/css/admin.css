@@ -171,7 +171,16 @@ select.form-control   { cursor: pointer; }
 }
 .topic-group-header--none { color: var(--text3); font-style: italic; }
 .lesson-sublist { list-style: none; }
-.topic-assign-select {\n  background: var(--bg3); color: var(--text);\n  border: 1px solid rgba(255,255,255,.1); border-radius: .25rem;\n  font-size: .78rem; padding: .2rem .35rem;\n  cursor: pointer;\n}\n\n/* Per-lesson setting toggles */\n.lesson-settings {\n  display: flex; gap: .25rem; align-items: center;\n}\n.lesson-toggle-btn {\n  font-size: .9rem; padding: .2rem .4rem;\n  background: var(--bg3); border: 1px solid rgba(255,255,255,.1);\n  border-radius: .25rem; cursor: pointer; opacity: .45;\n  transition: opacity .15s, background .15s;\n  line-height: 1;\n}\n.lesson-toggle-btn.active {\n  opacity: 1;\n  background: rgba(56,189,248,.18);\n  border-color: rgba(56,189,248,.5);\n}
+.topic-assign-select {
+  background: var(--bg4); color: var(--text);
+  border: 1px solid rgba(148,163,184,.45); border-radius: .25rem;
+  font-size: .78rem; padding: .2rem .4rem;
+  cursor: pointer; outline: none;
+}
+.topic-assign-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(56,189,248,.25);
+}\n\n/* Per-lesson setting toggles */\n.lesson-settings {\n  display: flex; gap: .25rem; align-items: center;\n}\n.lesson-toggle-btn {\n  font-size: .9rem; padding: .2rem .4rem;\n  background: var(--bg3); border: 1px solid rgba(255,255,255,.1);\n  border-radius: .25rem; cursor: pointer; opacity: .45;\n  transition: opacity .15s, background .15s;\n  line-height: 1;\n}\n.lesson-toggle-btn.active {\n  opacity: 1;\n  background: rgba(56,189,248,.18);\n  border-color: rgba(56,189,248,.5);\n}
 .mt-1 { margin-top: .25rem; }
 .lesson-item:hover   { background: rgba(255,255,255,.03); }
 .lesson-item.dragging { opacity: .5; background: var(--bg3); }
