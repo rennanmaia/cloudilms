@@ -66,6 +66,16 @@ ActivityLog::record('lesson_view', [
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
     if (in_array($_POST['lesson_id'] ?? '', array_column($lessons, 'id'))) {
         $completedLessonId = (int)$_POST['lesson_id'];
+        $duration          = (int)($lesson['duration_seconds'] ?? 0);
+        $watched           = (int)($_POST['watched_seconds'] ?? 0);
+        $minRequired       = $duration > 0 ? (int)floor($duration * 0.75) : 0;
+
+        if ($minRequired > 0 && $watched < $minRequired) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'err' => 'not_enough_watched']);
+            exit;
+        }
+
         $model->markComplete($userId, $course['id'], $completedLessonId);
         ActivityLog::record('lesson_complete', [
             'entity_type'  => 'lesson',
@@ -187,9 +197,11 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
         <?php endif; ?>
 
         <?php $isDone = in_array($lessonId, $progress); ?>
-        <button id="markBtn" class="btn btn-complete <?= $isDone ? 'btn-done' : '' ?>"
+        <?php $needsWatch = !$isDone && $lesson['duration_seconds']; ?>
+        <button id="markBtn" class="btn btn-complete <?= $isDone ? 'btn-done' : '' ?> <?= $needsWatch ? 'btn-locked' : '' ?>"
+                <?= $needsWatch ? 'disabled' : '' ?>
                 data-lesson="<?= $lessonId ?>" onclick="markComplete(this)">
-          <?= $isDone ? '✅ Concluída' : '✓ Marcar como concluída' ?>
+          <?= $isDone ? '✅ Concluída' : ($needsWatch ? '⏳ Assista 75% para concluir' : '✓ Marcar como concluída') ?>
         </button>
 
         <?php if ($nextLesson): ?>
@@ -206,6 +218,7 @@ const LESSON_ID       = <?= $lessonId ?>;
 const LESSON_DURATION = <?= (int)($lesson['duration_seconds'] ?? 0) ?>;  // segundos
 const PREVENT_SEEK    = <?= $preventSeek     ? 'true' : 'false' ?>;
 const ALREADY_DONE    = <?= in_array($lessonId, $progress) ? 'true' : 'false' ?>;
+const MIN_WATCH_SECS  = LESSON_DURATION > 0 ? Math.floor(LESSON_DURATION * 0.75) : 0;
 
 /* ── Referências DOM ─────────────────────────────────── */
 const iframe    = document.getElementById('lessonIframe');
@@ -234,10 +247,19 @@ function stopTicker() {
 }
 
 function checkAutoComplete() {
-    if (markedComplete || !PREVENT_SEEK) return;
-    if (!LESSON_DURATION) return; // sem duração cadastrada → só o botão manual
-    const threshold = Math.max(1, LESSON_DURATION - 10);
-    if (activeSeconds >= threshold) {
+    if (markedComplete) return;
+
+    // Desbloqueia o botão manual ao atingir 75%
+    if (MIN_WATCH_SECS > 0 && markBtn && markBtn.disabled && activeSeconds >= MIN_WATCH_SECS) {
+        markBtn.disabled = false;
+        markBtn.classList.remove('btn-locked');
+        markBtn.textContent = '\u2713 Marcar como conclu\u00edda';
+    }
+
+    // Auto-conclui ao atingir 75% (apenas quando seek está bloqueado)
+    if (!PREVENT_SEEK) return;
+    if (!MIN_WATCH_SECS) return;
+    if (activeSeconds >= MIN_WATCH_SECS) {
         autoMarkComplete();
     }
 }
@@ -294,6 +316,7 @@ function markComplete(btn) {
     const form = new FormData();
     form.append('mark_complete', '1');
     form.append('lesson_id', lid);
+    form.append('watched_seconds', activeSeconds);
 
     fetch('watch.php?lesson=' + lid, {method: 'POST', body: form})
         .then(r => r.json())
