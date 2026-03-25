@@ -258,13 +258,22 @@ a:hover { color: var(--primary2); }
 
 /* ── Bloqueador de seek (barra inferior do player) ── */
 .video-container { position: relative; flex: 1; background: #000; min-height: 0; }
+/* Mantido para compatibilidade, mas substituído por gdrive-controls-blocker */
 .seek-blocker {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  height: 58px;           /* altura aproximada dos controles do Drive */
+  height: 58px;
   z-index: 5;
   cursor: not-allowed;
-  /* transparente — só bloqueia eventos de mouse na região da barra */
+}
+/* Cobre toda a barra de controles inferior do Drive (barra de progresso + play + volume) */
+.gdrive-controls-blocker {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 62px;
+  z-index: 5;
+  background: #000;
+  cursor: default;
 }
 /* Cobre o botão de atalho para o Google Drive (canto superior direito) */
 .gdrive-link-blocker {

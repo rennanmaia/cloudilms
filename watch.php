@@ -179,10 +179,8 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
       ></iframe>
       <!-- Cobre o botão de link externo do Google Drive (canto superior direito) -->
       <div class="gdrive-link-blocker"></div>
-      <?php if ($preventSeek): ?>
-      <!-- Bloqueia apenas a barra de progresso do player do Drive (região inferior) -->
-      <div id="seekBlocker" class="seek-blocker" title="Avançar o vídeo está desabilitado"></div>
-      <?php endif; ?>
+      <!-- Cobre toda a barra de controles inferior do Drive (progresso + play + volume) -->
+      <div id="seekBlocker" class="gdrive-controls-blocker"></div>
     </div>
 
     <div class="watch-controls">
