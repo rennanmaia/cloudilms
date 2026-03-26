@@ -72,6 +72,21 @@ class CertificateModel {
         return $videoMins + $extraMins;
     }
 
+    /** Retorna todos os certificados emitidos para um aluno, do mais recente ao mais antigo. */
+    public function getAllByUser(int $userId): array {
+        $stmt = $this->db->prepare(
+            'SELECT cert.*,
+                    c.slug AS course_slug,
+                    c.thumbnail AS course_thumbnail
+             FROM certificates cert
+             LEFT JOIN courses c ON c.id = cert.course_id
+             WHERE cert.user_id = ?
+             ORDER BY cert.issued_at DESC'
+        );
+        $stmt->execute([$userId]);
+        return $stmt->fetchAll();
+    }
+
     /** Formata minutos para exibição humana: "2h30min", "45 minutos", etc. */
     public static function formatWorkload(int $minutes): string {
         if ($minutes <= 0)  return '—';

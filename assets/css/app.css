@@ -329,6 +329,75 @@ a:hover { color: var(--primary2); }
 }
 .btn-unenroll-course:hover { color: #fca5a5; }
 
+/* ── Meus Certificados ──────────────────────────────── */
+.page-heading-row {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 1.5rem; flex-wrap: wrap; gap: .75rem;
+}
+.btn-back-link {
+  font-size: .9rem; color: var(--text3);
+  padding: .35rem .75rem; border-radius: .4rem;
+  border: 1px solid var(--bg3); transition: color .15s, border-color .15s;
+}
+.btn-back-link:hover { color: var(--text); border-color: var(--text3); }
+
+.cert-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.cert-card {
+  background: var(--bg2);
+  border: 1px solid rgba(201,168,76,.3);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  display: flex; flex-direction: column; gap: 1rem;
+  transition: border-color .2s, box-shadow .2s;
+}
+.cert-card:hover {
+  border-color: rgba(201,168,76,.65);
+  box-shadow: 0 4px 24px rgba(201,168,76,.12);
+}
+.cert-card-seal {
+  font-size: 2.75rem; text-align: center; line-height: 1;
+}
+.cert-card-body { display: flex; flex-direction: column; gap: .5rem; flex: 1; }
+.cert-card-course {
+  font-size: 1.05rem; font-weight: 700; color: var(--text);
+  line-height: 1.35;
+}
+.cert-card-student { font-size: .9rem; color: var(--text2); }
+.cert-card-meta {
+  display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .35rem;
+}
+.cert-meta-badge {
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--bg3);
+  border-radius: 9999px;
+  padding: .2rem .65rem;
+  font-size: .78rem; color: var(--text2);
+}
+.cert-code-badge { font-family: monospace; letter-spacing: .04em; }
+.cert-card-actions {
+  display: flex; gap: .5rem; flex-wrap: wrap;
+}
+.btn-cert-view, .btn-cert-print, .btn-cert-share {
+  flex: 1; min-width: 90px;
+  display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
+  padding: .5rem .75rem; border-radius: .4rem;
+  font-size: .83rem; font-weight: 600; cursor: pointer;
+  border: none; text-decoration: none; transition: opacity .15s;
+}
+.btn-cert-view  { background: rgba(201,168,76,.15); color: #c9a84c; border: 1px solid rgba(201,168,76,.35); }
+.btn-cert-print { background: rgba(56,189,248,.1);  color: var(--primary); border: 1px solid rgba(56,189,248,.3); }
+.btn-cert-share { background: rgba(255,255,255,.05); color: var(--text2); border: 1px solid var(--bg3); }
+.btn-cert-view:hover, .btn-cert-print:hover, .btn-cert-share:hover { opacity: .75; }
+.cert-list-info {
+  font-size: .85rem; color: var(--text3); text-align: center;
+  margin-top: .5rem;
+}
+
 /* ── Dashboard trails bar ───────────────────────────── */
 .dashboard-trails-bar {
   display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
