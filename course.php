@@ -5,12 +5,14 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
+require_once __DIR__ . '/includes/trail.php';
 require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/certificate.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
 $model = new CourseModel();
+$trailModel = new TrailModel();
 
 $slug = trim($_GET['slug'] ?? '');
 if (!$slug) { header('Location: ' . APP_URL . '/index.php'); exit; }
@@ -22,12 +24,18 @@ $lessons  = $model->getLessonsByCourse($course['id']);
 $grouped  = $model->getLessonsGroupedByTopic($course['id']);
 $hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
 $logged   = $auth->isLoggedIn();
-$enrolled = $logged && $model->isEnrolled((int)$_SESSION['user_id'], $course['id']);
-$progress = $enrolled ? $model->getProgress((int)$_SESSION['user_id'], $course['id']) : [];
+$userId   = $logged ? (int)$_SESSION['user_id'] : 0;
+$enrolled = $logged && $model->isEnrolled($userId, $course['id']);
+$progress = $enrolled ? $model->getProgress($userId, $course['id']) : [];
+$enrollBlocked = $logged && !$enrolled && !$trailModel->canEnrollInCourse($userId, $course['id']);
 
 // Matrícula automática ao clicar em "começar"
 if ($logged && isset($_GET['enroll'])) {
-    $model->enroll((int)$_SESSION['user_id'], $course['id']);
+    if ($enrollBlocked) {
+        header('Location: course.php?slug=' . urlencode($slug) . '&notice=trail_locked');
+        exit;
+    }
+    $model->enroll($userId, $course['id']);
     ActivityLog::record('course_enroll', [
         'entity_type'  => 'course',
         'entity_id'    => $course['id'],
@@ -54,6 +62,11 @@ siteHeader($course['title']);
   🔒 Você precisa concluir as aulas anteriores antes de acessar esta aula.
 </div>
 <?php endif; ?>
+<?php if (($_GET['notice'] ?? '') === 'trail_locked'): ?>
+<div class="alert alert-danger" style="margin:1rem auto;max-width:860px">
+  🔒 Este curso pertence a uma <strong>trilha bloqueada</strong>. Solicite ao administrador que libere seu acesso.
+</div>
+<?php endif; ?>
 
 <div class="course-page">
   <!-- Header do curso -->
@@ -75,6 +88,11 @@ siteHeader($course['title']);
       </div>
       <?php if (!$logged): ?>
         <a href="login.php?redirect=<?= urlencode('course.php?slug=' . $slug . '&enroll=1') ?>" class="btn-hero">🔐 Entrar para assistir</a>
+      <?php elseif (!$enrolled && $enrollBlocked): ?>
+        <div class="trail-blocked-notice">
+          🔒 Este curso só está disponível por trílha bloqueada.<br>
+          <a href="<?= APP_URL ?>/trails.php" style="color:var(--primary);font-size:.9rem">Ver minhas trilhas</a>
+        </div>
       <?php elseif (!$enrolled): ?>
         <a href="course.php?slug=<?= urlencode($slug) ?>&enroll=1" class="btn-hero">🎓 Matricular-se gratuitamente</a>
       <?php else: ?>

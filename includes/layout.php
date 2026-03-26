@@ -25,6 +25,7 @@ function siteHeader(string $title): void {
       <a href="<?= $appUrl ?>/index.php">Cursos</a>
       <?php if ($logged): ?>
         <a href="<?= $appUrl ?>/dashboard.php">Meus Cursos</a>
+        <a href="<?= $appUrl ?>/trails.php">Minhas Trilhas</a>
         <?php if ($isAdmin): ?>
           <a href="<?= $appUrl ?>/admin/">Painel Admin</a>
         <?php endif; ?>

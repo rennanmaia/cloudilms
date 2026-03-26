@@ -156,6 +156,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo json_encode(['ok' => true]);
                 exit;
 
+            case 'lesson_estimated':
+                $lessonId = (int)($_POST['lesson_id'] ?? 0);
+                $minutes  = max(0, (int)($_POST['minutes'] ?? 0));
+                $seconds  = $minutes > 0 ? $minutes * 60 : null;
+                if ($lessonId) $model->updateLessonEstimated($lessonId, $seconds);
+                header('Content-Type: application/json');
+                echo json_encode(['ok' => true]);
+                exit;
+
             case 'delete_lesson':
                 $lessonId = (int)($_POST['lesson_id'] ?? 0);
                 if ($lessonId) $model->deleteLesson($lessonId);
@@ -396,9 +405,24 @@ if ($action === 'lessons') {
                   <span class="lesson-num"><?= $i + 1 ?></span>
                   <div class="lesson-info">
                     <span class="lesson-title"><?= htmlspecialchars($l['title']) ?></span>
-                    <?php if ($l['duration_seconds']): ?>
-                    <span class="lesson-duration"><?= gmdate('H:i:s', $l['duration_seconds']) ?></span>
-                    <?php endif; ?>
+                    <span class="lesson-dur-row">
+                      <?php if ($l['duration_seconds']): ?>
+                        <span class="lesson-dur-badge dur-auto" title="Duração detectada automaticamente">⏱ <?= gmdate($l['duration_seconds'] >= 3600 ? 'H:i:s' : 'i:s', $l['duration_seconds']) ?></span>
+                      <?php elseif (!empty($l['estimated_seconds'])): ?>
+                        <span class="lesson-dur-badge dur-est" title="Tempo estimado (definido manualmente)">⏱ ~<?= gmdate($l['estimated_seconds'] >= 3600 ? 'H:i:s' : 'i:s', $l['estimated_seconds']) ?></span>
+                      <?php else: ?>
+                        <span class="lesson-dur-badge dur-none">⏱ —</span>
+                      <?php endif; ?>
+                      <label class="lesson-est-wrap" title="Duração estimada em minutos (usado quando não há duração automática)">
+                        <span class="est-lbl">Est.:</span>
+                        <input class="lesson-est-input" type="number" min="0" max="9999" placeholder="—"
+                               value="<?= !empty($l['estimated_seconds']) ? (int)round($l['estimated_seconds'] / 60) : '' ?>"
+                               data-lesson="<?= $l['id'] ?>"
+                               onblur="saveEstimated(this)"
+                               onkeydown="if(event.key==='Enter'){this.blur();event.preventDefault();}">
+                        <span class="est-unit">min</span>
+                      </label>
+                    </span>
                   </div>
                   <!-- Mover para tópico -->
                   <select class="topic-assign-select" data-lesson="<?= $l['id'] ?>" onchange="assignTopic(this)"
@@ -415,13 +439,19 @@ if ($action === 'lessons') {
                             data-field="prevent_seek"
                             title="<?= $l['prevent_seek'] ? '✅ Avanço bloqueado — clique para desativar' : 'Bloquear avanço do vídeo (desativado)' ?>"
                             onclick="toggleSetting(this)">
-                      ⏩
+                      ⏩ <span class="tgl-label">Seek</span>
                     </button>
                     <button class="btn btn-sm lesson-toggle-btn <?= $l['force_sequential'] ? 'active' : '' ?>"
                             data-field="force_sequential"
                             title="<?= $l['force_sequential'] ? '✅ Sequencial obrigatório — clique para desativar' : 'Exige conclusão da aula anterior (desativado)' ?>"
                             onclick="toggleSetting(this)">
-                      🔒
+                      🔒 <span class="tgl-label">Seq.</span>
+                    </button>
+                    <button class="btn btn-sm lesson-toggle-btn <?= !empty($l['require_watch']) ? 'active' : '' ?>"
+                            data-field="require_watch"
+                            title="<?= !empty($l['require_watch']) ? '✅ Exige 75% assistido — clique para permitir conclusão manual' : 'Conclusão manual permitida — clique para exigir 75%' ?>"
+                            onclick="toggleSetting(this)">
+                      🎯 <span class="tgl-label">75%</span>
                     </button>
                   </div>
                   <div class="lesson-actions">
@@ -493,20 +523,22 @@ if ($action === 'lessons') {
         document.getElementById('topicCancelBtn').style.display = 'none';
     }
 
-    // ── Toggles por aula (prevent_seek / force_sequential) ─────────────
+    // ── Toggles por aula (prevent_seek / force_sequential / require_watch) ──
     function toggleSetting(btn) {
-        const wrap    = btn.closest('.lesson-settings');
+        const wrap     = btn.closest('.lesson-settings');
         const lessonId = wrap.dataset.id;
         const field    = btn.dataset.field;
 
-        // Lê estado atual dos dois botões deste item
+        // Lê estado atual dos três botões deste item
         const allBtns = wrap.querySelectorAll('.lesson-toggle-btn');
         let preventSeek     = 0;
         let forceSequential = 0;
+        let requireWatch    = 0;
         allBtns.forEach(b => {
             const val = b === btn ? (b.classList.contains('active') ? 0 : 1) : (b.classList.contains('active') ? 1 : 0);
             if (b.dataset.field === 'prevent_seek')     preventSeek     = val;
             if (b.dataset.field === 'force_sequential') forceSequential = val;
+            if (b.dataset.field === 'require_watch')    requireWatch    = val;
         });
 
         const form = new FormData();
@@ -514,15 +546,54 @@ if ($action === 'lessons') {
         form.append('lesson_id',        lessonId);
         form.append('prevent_seek',     preventSeek);
         form.append('force_sequential', forceSequential);
+        form.append('require_watch',    requireWatch);
+
+        const titles = {
+            prevent_seek:     ['✅ Avanço bloqueado — clique para desativar',          'Bloquear avanço do vídeo (desativado)'],
+            force_sequential: ['✅ Sequencial obrigatório — clique para desativar',    'Exige conclusão da aula anterior (desativado)'],
+            require_watch:    ['✅ Exige 75% assistido — clique para permitir conclusão manual', 'Conclusão manual permitida — clique para exigir 75%'],
+        };
 
         fetch(`courses.php?action=lesson_settings&id=${COURSE_ID}`, {method:'POST', body:form})
             .then(r => r.json())
             .then(d => {
                 if (d.ok) {
                     btn.classList.toggle('active');
-                    btn.title = btn.classList.contains('active')
-                        ? (field === 'prevent_seek' ? '✅ Avanço bloqueado — clique para desativar' : '✅ Sequencial ativo — clique para desativar')
-                        : (field === 'prevent_seek' ? 'Bloquear avanço do vídeo' : 'Exige conclusão da aula anterior');
+                    const isActive = btn.classList.contains('active');
+                    btn.title = titles[field][isActive ? 0 : 1];
+                }
+            });
+    }
+
+    // ── Tempo estimado por aula ──────────────────────────────────────────
+    function saveEstimated(input) {
+        const lessonId = input.dataset.lesson;
+        const minutes  = parseInt(input.value, 10) || 0;
+        const form = new FormData();
+        form.append('csrf', CSRF);
+        form.append('lesson_id', lessonId);
+        form.append('minutes',   minutes);
+        fetch(`courses.php?action=lesson_estimated&id=${COURSE_ID}`, {method:'POST', body:form})
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) return;
+                const badge = input.closest('.lesson-dur-row').querySelector('.lesson-dur-badge');
+                if (!badge || badge.classList.contains('dur-auto')) return;
+                if (minutes > 0) {
+                    const secs = minutes * 60;
+                    const h = Math.floor(secs / 3600);
+                    const m = Math.floor((secs % 3600) / 60);
+                    const s = secs % 60;
+                    const fmt = h > 0
+                        ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`
+                        : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+                    badge.textContent = `⏱ ~${fmt}`;
+                    badge.className = 'lesson-dur-badge dur-est';
+                    badge.title = 'Tempo estimado (definido manualmente)';
+                } else {
+                    badge.textContent = '⏱ —';
+                    badge.className = 'lesson-dur-badge dur-none';
+                    badge.title = '';
                 }
             });
     }

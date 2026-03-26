@@ -5,19 +5,34 @@
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
+require_once __DIR__ . '/includes/trail.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth = new Auth();
 $auth->requireLogin();
 
-$model   = new CourseModel();
-$userId  = (int)$_SESSION['user_id'];
-$courses = $model->getEnrolledCourses($userId);
+$model      = new CourseModel();
+$trailModel = new TrailModel();
+$userId     = (int)$_SESSION['user_id'];
+$courses    = $model->getEnrolledCourses($userId);
+$trails     = $trailModel->getUserTrails($userId);
 
 siteHeader('Meus Cursos');
 ?>
 
 <h1 class="page-heading">Meus Cursos</h1>
+
+<?php if ($trails): ?>
+<div class="dashboard-trails-bar">
+  <span class="dashboard-trails-label">🗺️ Minhas Trilhas:</span>
+  <?php foreach ($trails as $t): ?>
+  <a href="<?= APP_URL ?>/trails.php" class="dashboard-trail-chip <?= $t['status'] === 'locked' ? 'chip-locked' : 'chip-unlocked' ?>">
+    <?= $t['status'] === 'locked' ? '🔴' : '🟢' ?> <?= htmlspecialchars($t['title']) ?>
+  </a>
+  <?php endforeach; ?>
+  <a href="<?= APP_URL ?>/trails.php" class="dashboard-trails-more">Ver todas →</a>
+</div>
+<?php endif; ?>
 
 <?php if ($courses): ?>
 <div class="course-grid">

@@ -2,12 +2,14 @@
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/database.php';
+require_once __DIR__ . '/../includes/trail.php';
 require_once __DIR__ . '/layout.php';
 
 $auth = new Auth();
 $auth->requireAdmin();
 
-$db = Database::getConnection();
+$db         = Database::getConnection();
+$trailModel = new TrailModel();
 $message = $error = '';
 
 if (!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -57,6 +59,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header('Location: users.php?msg=' . urlencode('Usuário excluído.'));
                 exit;
             }
+        }
+
+        // ── Trilhas ──────────────────────────────────────────────────────────
+        if ($action === 'assign_trail' && $id) {
+            $trailId = (int)($_POST['trail_id'] ?? 0);
+            $status  = ($_POST['trail_status'] ?? 'unlocked') === 'locked' ? 'locked' : 'unlocked';
+            if ($trailId) $trailModel->assignTrail($id, $trailId, $status, (int)$_SESSION['user_id']);
+            header('Location: users.php?action=edit&id=' . $id . '&msg=' . urlencode('Trilha atribuída.'));
+            exit;
+        }
+        if ($action === 'remove_trail' && $id) {
+            $trailId = (int)($_POST['trail_id'] ?? 0);
+            if ($trailId) $trailModel->removeUserTrail($id, $trailId);
+            header('Location: users.php?action=edit&id=' . $id . '&msg=' . urlencode('Trilha removida.'));
+            exit;
+        }
+        if ($action === 'toggle_trail' && $id) {
+            $trailId = (int)($_POST['trail_id'] ?? 0);
+            $newStatus = $trailId ? $trailModel->toggleTrailStatus($id, $trailId) : null;
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => (bool)$newStatus, 'status' => $newStatus]);
+            exit;
         }
     }
 }
@@ -128,5 +152,99 @@ if ($action === 'new' || $action === 'edit') {
         </form>
       </div>
     </div>
+
+    <?php if ($id):
+      $userTrails     = $trailModel->getUserTrails($id);
+      $availableTrails = $trailModel->getAvailableTrailsForUser($id);
+    ?>
+    <div class="card mt-2">
+      <div class="card-header">
+        <h2>🗺️ Trilhas do Usuário (<?= count($userTrails) ?>)</h2>
+      </div>
+      <?php if ($userTrails): ?>
+      <table class="table">
+        <thead>
+          <tr><th>Trilha</th><th>Cursos</th><th>Status</th><th>Atribuída em</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          <?php foreach ($userTrails as $ut): ?>
+          <tr>
+            <td><strong><?= htmlspecialchars($ut['title']) ?></strong></td>
+            <td><?= $ut['course_count'] ?></td>
+            <td>
+              <button class="btn btn-sm trail-status-btn <?= $ut['status'] === 'unlocked' ? 'trail-unlocked' : 'trail-locked' ?>"
+                      data-trail="<?= $ut['id'] ?>"
+                      onclick="toggleTrail(this, <?= $id ?>)"
+                      title="Clique para alternar">
+                <?= $ut['status'] === 'unlocked' ? '🟢 Liberada' : '🔴 Bloqueada' ?>
+              </button>
+            </td>
+            <td style="font-size:.8rem;color:var(--text3)"><?= date('d/m/Y', strtotime($ut['assigned_at'])) ?></td>
+            <td>
+              <form method="post" action="users.php?action=remove_trail&id=<?= $id ?>" style="display:inline"
+                    onsubmit="return confirm('Remover a trilha &quot;<?= htmlspecialchars(addslashes($ut['title'])) ?>&quot; deste usuário?')">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="trail_id" value="<?= $ut['id'] ?>">
+                <button class="btn btn-sm btn-danger">✕ Remover</button>
+              </form>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php else: ?>
+      <div class="card-body" style="color:var(--text3)">Nenhuma trilha atribuída a este usuário.</div>
+      <?php endif; ?>
+
+      <?php if ($availableTrails): ?>
+      <div class="card-body" style="border-top:1px solid var(--bg3);padding-top:1rem">
+        <strong style="font-size:.9rem">Atribuir trilha</strong>
+        <form method="post" action="users.php?action=assign_trail&id=<?= $id ?>" style="display:flex;gap:.75rem;align-items:flex-end;margin-top:.75rem;flex-wrap:wrap">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <div class="form-group" style="margin:0;flex:1;min-width:200px">
+            <label>Trilha</label>
+            <select name="trail_id" class="form-control topic-assign-select" required>
+              <option value="">— selecione —</option>
+              <?php foreach ($availableTrails as $t): ?>
+              <option value="<?= $t['id'] ?>"><?= htmlspecialchars($t['title']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Status inicial</label>
+            <select name="trail_status" class="form-control topic-assign-select">
+              <option value="unlocked">🟢 Liberada</option>
+              <option value="locked">🔴 Bloqueada</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">+ Atribuir</button>
+        </form>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <script>
+    const CSRF_UT = <?= json_encode($csrf) ?>;
+    function toggleTrail(btn, userId) {
+        const trailId = btn.dataset.trail;
+        const form = new FormData();
+        form.append('csrf',     CSRF_UT);
+        form.append('trail_id', trailId);
+        fetch(`users.php?action=toggle_trail&id=${userId}`, {method:'POST', body:form})
+            .then(r => r.json())
+            .then(d => {
+                if (!d.ok) return;
+                if (d.status === 'unlocked') {
+                    btn.textContent = '🟢 Liberada';
+                    btn.className = 'btn btn-sm trail-status-btn trail-unlocked';
+                } else {
+                    btn.textContent = '🔴 Bloqueada';
+                    btn.className = 'btn btn-sm trail-status-btn trail-locked';
+                }
+            });
+    }
+    </script>
+    <?php endif; ?>
+
     <?php adminFooter();
 }

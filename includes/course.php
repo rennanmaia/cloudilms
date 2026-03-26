@@ -259,6 +259,11 @@ class CourseModel {
         )->execute([$preventSeek, $forceSequential, $requireWatch, $lessonId]);
     }
 
+    public function updateLessonEstimated(int $lessonId, ?int $estimatedSeconds): void {
+        $this->db->prepare('UPDATE lessons SET estimated_seconds = ? WHERE id = ?')
+                 ->execute([$estimatedSeconds, $lessonId]);
+    }
+
     public function deleteLesson(int $id): void {
         $this->db->prepare('DELETE FROM lessons WHERE id = ?')->execute([$id]);
     }

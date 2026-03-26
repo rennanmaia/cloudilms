@@ -64,7 +64,7 @@ class CertificateModel {
      */
     public function calculateWorkload(int $courseId, array $course): int {
         $stmt = $this->db->prepare(
-            'SELECT COALESCE(SUM(duration_seconds), 0) FROM lessons WHERE course_id = ?'
+            'SELECT COALESCE(SUM(COALESCE(duration_seconds, estimated_seconds, 0)), 0) FROM lessons WHERE course_id = ?'
         );
         $stmt->execute([$courseId]);
         $videoMins = (int) ceil((int) $stmt->fetchColumn() / 60);

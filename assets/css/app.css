@@ -295,6 +295,112 @@ a:hover { color: var(--primary2); }
 
 .page-heading { font-size: 1.75rem; font-weight: 700; margin-bottom: 1.5rem; }
 
+/* ── Dashboard trails bar ───────────────────────────── */
+.dashboard-trails-bar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: .5rem;
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); padding: .75rem 1rem;
+  margin-bottom: 1.5rem;
+}
+.dashboard-trails-label { font-size: .85rem; color: var(--text3); white-space: nowrap; }
+.dashboard-trail-chip {
+  display: inline-flex; align-items: center; gap: .3rem;
+  padding: .3rem .75rem; border-radius: 9999px;
+  font-size: .82rem; font-weight: 600; transition: opacity .15s;
+}
+.dashboard-trail-chip:hover { opacity: .8; }
+.chip-unlocked { background: rgba(34,197,94,.12); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
+.chip-locked   { background: rgba(239,68,68,.1);  color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+.dashboard-trails-more { font-size: .82rem; color: var(--primary); margin-left: auto; white-space: nowrap; }
+
+/* ── Trail cards (student view) ───────────────────────── */
+.trails-grid {
+  display: flex; flex-direction: column; gap: 2rem;
+}
+.trail-card {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); overflow: hidden;
+}
+.trail-card--locked { border-color: rgba(239,68,68,.35); }
+.trail-card-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 1rem; padding: 1.25rem 1.5rem;
+}
+.trail-card-title {
+  display: flex; align-items: flex-start; gap: .75rem;
+}
+.trail-card-icon { font-size: 1.1rem; margin-top: .15rem; }
+.trail-card-title h2 { font-size: 1.1rem; font-weight: 700; margin: 0; }
+.trail-card-desc { font-size: .875rem; color: var(--text2); margin-top: .25rem; }
+.trail-status-pill {
+  white-space: nowrap; padding: .3rem .85rem; border-radius: 9999px;
+  font-size: .78rem; font-weight: 700; flex-shrink: 0;
+}
+.trail-status-pill--unlocked { background: rgba(34,197,94,.12); color: #4ade80; border: 1px solid rgba(74,222,128,.3); }
+.trail-status-pill--locked   { background: rgba(239,68,68,.1);  color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+
+.trail-progress-bar-wrap {
+  height: 4px; background: var(--bg3); margin: 0 1.5rem;
+}
+.trail-progress-bar {
+  height: 4px; background: var(--success); border-radius: 2px;
+  transition: width .3s;
+}
+.trail-progress-label {
+  font-size: .8rem; color: var(--text3); padding: .4rem 1.5rem .25rem;
+}
+.trail-locked-notice {
+  margin: .75rem 1.5rem;
+  background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25);
+  border-radius: .5rem; padding: .75rem 1rem;
+  font-size: .875rem; color: #fca5a5;
+}
+
+/* Trail course sequence */
+.trail-course-sequence {
+  list-style: none; margin: 1rem 1.5rem 1.5rem; display: flex; flex-direction: column; gap: .5rem;
+}
+.trail-seq-item {
+  display: flex; align-items: center; gap: .85rem;
+  background: var(--bg3); border-radius: .5rem;
+  padding: .75rem 1rem; border: 1px solid transparent;
+  transition: border-color .15s;
+}
+.trail-seq-item--done   { border-color: rgba(34,197,94,.3); }
+.trail-seq-item--active { border-color: rgba(56,189,248,.3); }
+.trail-seq-item--blocked { opacity: .65; }
+.trail-seq-num {
+  font-size: .78rem; font-weight: 700; color: var(--text3);
+  background: var(--bg); border-radius: 50%; width: 1.75rem; height: 1.75rem;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.trail-seq-info  { flex: 1; min-width: 0; }
+.trail-seq-title { font-size: .9rem; font-weight: 500; display: block; }
+.trail-seq-progress { display: flex; align-items: center; gap: .5rem; margin-top: .3rem; }
+.trail-seq-bar   { flex: 1; height: 4px; background: var(--bg); border-radius: 2px; }
+.trail-seq-fill  { height: 4px; background: var(--primary); border-radius: 2px; }
+.trail-seq-progress span { font-size: .75rem; color: var(--text3); }
+
+.trail-seq-action { flex-shrink: 0; }
+.btn-trail-action {
+  display: inline-block; padding: .35rem .9rem; border-radius: .4rem;
+  font-size: .8rem; font-weight: 600; cursor: pointer; text-decoration: none;
+  transition: opacity .15s;
+}
+.btn-trail-action:hover { opacity: .8; }
+.btn-trail-done    { background: rgba(34,197,94,.12); color: #4ade80; }
+.btn-trail-continue { background: rgba(56,189,248,.15); color: var(--primary); }
+.btn-trail-enroll  { background: var(--primary); color: var(--bg); }
+.btn-trail-blocked { background: rgba(239,68,68,.08); color: #fca5a5; cursor: default; }
+
+/* Enrollment blocked notice on course page */
+.trail-blocked-notice {
+  background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25);
+  border-radius: .5rem; padding: 1rem 1.25rem;
+  color: #fca5a5; font-size: .9rem; margin-top: .75rem;
+  display: inline-block;
+}
+
 /* ── Responsive ─────────────────────────────── */
 @media (max-width: 768px) {
   .watch-layout { flex-direction: column; height: auto; }
