@@ -69,7 +69,9 @@ class CertificateModel {
         $stmt->execute([$courseId]);
         $videoMins = (int) ceil((int) $stmt->fetchColumn() / 60);
         $extraMins = (int) ($course['extra_hours_minutes'] ?? 0);
-        return $videoMins + $extraMins;
+        $total     = $videoMins + $extraMins;
+        // Arredonda para cima até a hora cheia mais próxima
+        return (int) ceil($total / 60) * 60;
     }
 
     /** Retorna todos os certificados emitidos para um aluno, do mais recente ao mais antigo. */
