@@ -183,7 +183,7 @@ class TrailModel {
         $stmt->execute(array_merge([$userId], $trailIds));
         $statuses = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-        if (!$statuses) return true; // Usuário não tem atribuição nenhuma → acesso livre
+        if (!$statuses) return false; // Usuário não tem atribuição nesta trilha → acesso negado
 
         return in_array('unlocked', $statuses, true);
     }

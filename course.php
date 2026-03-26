@@ -90,7 +90,7 @@ siteHeader($course['title']);
 <?php endif; ?>
 <?php if (($_GET['notice'] ?? '') === 'trail_locked'): ?>
 <div class="alert alert-danger" style="margin:1rem auto;max-width:860px">
-  🔒 Este curso pertence a uma <strong>trilha bloqueada</strong>. Solicite ao administrador que libere seu acesso.
+  🔒 Este curso pertence a uma trilha que <strong>não está liberada</strong> para você. Solicite ao administrador que libere seu acesso.
 </div>
 <?php endif; ?>
 <?php if (($_GET['notice'] ?? '') === 'unenrolled'): ?>
@@ -126,7 +126,7 @@ siteHeader($course['title']);
         <a href="login.php?redirect=<?= urlencode('course.php?slug=' . $slug . '&enroll=1') ?>" class="btn-hero">🔐 Entrar para assistir</a>
       <?php elseif (!$enrolled && $enrollBlocked): ?>
         <div class="trail-blocked-notice">
-          🔒 Este curso só está disponível por trílha bloqueada.<br>
+          🔒 Este curso pertence a uma trilha que não está liberada para você.<br>
           <a href="<?= APP_URL ?>/trails.php" style="color:var(--primary);font-size:.9rem">Ver minhas trilhas</a>
         </div>
       <?php elseif (!$enrolled): ?>
