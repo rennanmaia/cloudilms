@@ -8,11 +8,13 @@ require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/trail.php';
 require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/certificate.php';
+require_once __DIR__ . '/includes/quiz.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
 $model = new CourseModel();
 $trailModel = new TrailModel();
+$quizModel  = new QuizModel();
 
 $slug = trim($_GET['slug'] ?? '');
 if (!$slug) { header('Location: ' . APP_URL . '/index.php'); exit; }
@@ -96,6 +98,11 @@ siteHeader($course['title']);
   ✅ Matrícula cancelada. Seu histórico neste curso foi removido.
 </div>
 <?php endif; ?>
+<?php if (($_GET['notice'] ?? '') === 'cert_quiz_pending'): ?>
+<div class="alert alert-danger" style="margin:1rem auto;max-width:860px">
+  📝 Você precisa ser aprovado em todos os <strong>questionários do curso</strong> para emitir o certificado.
+</div>
+<?php endif; ?>
 
 <div class="course-page">
   <!-- Header do curso -->
@@ -131,11 +138,29 @@ siteHeader($course['title']);
           foreach ($lessons as $l) {
               if (!in_array($l['id'], $progress)) { $firstIncomplete = $l; break; }
           }
-          $resumeId = $firstIncomplete ? $firstIncomplete['id'] : $lessons[0]['id'];
-          $certUrl  = APP_URL . '/certificate.php?course=' . urlencode($slug);
+          $resumeId        = $firstIncomplete ? $firstIncomplete['id'] : $lessons[0]['id'];
+          $certUrl         = APP_URL . '/certificate.php?course=' . urlencode($slug);
+          $pendingQuizzes  = $courseComplete ? $quizModel->getPendingQuizzesByCourse($course['id'], $userId) : [];
+          $allQuizPassed   = empty($pendingQuizzes);
         ?>
-          <?php if ($courseComplete): ?>
+          <?php if ($courseComplete && $allQuizPassed): ?>
           <a href="<?= $certUrl ?>" class="btn-hero btn-cert">📜 Ver Certificado</a>
+          <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero btn-hero-alt" style="margin-top:.5rem">▶ Rever aulas</a>
+          <?php elseif ($courseComplete && !$allQuizPassed): ?>
+          <!-- Questionários pendentes -->
+          <div class="quiz-pending-block">
+            <p class="quiz-pending-title">📝 Questionários pendentes</p>
+            <p class="quiz-pending-desc">Você precisa ser aprovado nos questionários abaixo para obter o certificado:</p>
+            <div class="quiz-pending-list">
+              <?php foreach ($pendingQuizzes as $pq): ?>
+              <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $pq['id'] ?>&amp;course_slug=<?= urlencode($slug) ?>"
+                 class="quiz-pending-btn">
+                ▶ <?= htmlspecialchars($pq['title']) ?>
+                <small>(mín. <?= number_format((float)$pq['min_score'], 0) ?>%)</small>
+              </a>
+              <?php endforeach; ?>
+            </div>
+          </div>
           <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero btn-hero-alt" style="margin-top:.5rem">▶ Rever aulas</a>
           <?php else: ?>
           <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero">▶ Continuar assistindo</a>

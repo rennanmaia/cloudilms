@@ -11,6 +11,7 @@ require_once __DIR__ . '/includes/database.php';
 require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/certificate.php';
+require_once __DIR__ . '/includes/quiz.php';
 
 $db        = Database::getConnection();
 $auth      = new Auth();
@@ -51,6 +52,13 @@ $progress = $model->getProgress($userId, $course['id']);
 
 if (count($lessons) === 0 || count($progress) < count($lessons)) {
     header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($slug) . '&notice=cert_incomplete');
+    exit;
+}
+
+// Verifica se todos os questionários do curso foram aprovados
+$quizModel = new QuizModel();
+if (!$quizModel->allQuizzesPassed($userId, $course['id'])) {
+    header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($slug) . '&notice=cert_quiz_pending');
     exit;
 }
 

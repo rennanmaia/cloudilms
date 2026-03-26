@@ -210,6 +210,7 @@ if ($action === 'list') {
             <td class="actions">
               <a href="courses.php?action=edit&id=<?= $c['id'] ?>" class="btn btn-sm">✏️ Editar</a>
               <a href="courses.php?action=lessons&id=<?= $c['id'] ?>" class="btn btn-sm btn-secondary">▶ Aulas</a>
+              <a href="quizzes.php?course_id=<?= $c['id'] ?>" class="btn btn-sm btn-secondary">📝 Questionários</a>
               <form method="post" action="courses.php?action=delete&id=<?= $c['id'] ?>" style="display:inline" onsubmit="return confirm('Excluir este curso e todas as aulas?')">
                 <input type="hidden" name="csrf" value="<?= $csrf ?>">
                 <button class="btn btn-sm btn-danger">🗑 Excluir</button>
@@ -300,6 +301,22 @@ if ($action === 'lessons') {
     $topics       = $model->getTopicsByCourse($id);
     $totalLessons = array_sum(array_map(fn($g) => count($g['lessons']), $grouped));
 
+    require_once __DIR__ . '/../includes/quiz.php';
+    $_qmL            = new QuizModel();
+    $_allCQuizzes    = $_qmL->getQuizzesByCourse($id);
+    $quizzesByLesson = [];
+    $quizzesByTopic  = [];
+    $endOfCourseQuizzes = [];
+    foreach ($_allCQuizzes as $_cq) {
+        if ($_cq['placement_type'] === 'after_lesson' && $_cq['placement_id']) {
+            $quizzesByLesson[(int)$_cq['placement_id']][] = $_cq;
+        } elseif ($_cq['placement_type'] === 'after_topic' && $_cq['placement_id']) {
+            $quizzesByTopic[(int)$_cq['placement_id']][] = $_cq;
+        } else {
+            $endOfCourseQuizzes[] = $_cq;
+        }
+    }
+
     adminHeader('Aulas: ' . $course['title'], 'courses');
     ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
@@ -314,6 +331,7 @@ if ($action === 'lessons') {
             Se a pasta tiver <strong>subpastas</strong>, elas serão criadas automaticamente como tópicos.</small>
         </div>
         <div style="display:flex;gap:.75rem;align-items:center">
+          <a href="quizzes.php?course_id=<?= $id ?>" class="btn btn-sm btn-secondary">📝 Questionários</a>
           <a href="<?= htmlspecialchars($course['gdrive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-secondary">🔗 Abrir no Drive</a>
           <form method="post" action="courses.php?action=sync&id=<?= $id ?>">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -463,12 +481,91 @@ if ($action === 'lessons') {
                     </form>
                   </div>
                 </li>
+                <?php if (isset($quizzesByLesson[(int)$l['id']])): ?>
+                  <?php foreach ($quizzesByLesson[(int)$l['id']] as $_cq): ?>
+                  <li class="lesson-quiz-row">
+                    <span class="drag-handle" style="visibility:hidden">&#x2807;</span>
+                    <span class="lesson-num lesson-quiz-badge">&#x1F4DD;</span>
+                    <div class="lesson-info">
+                      <span class="lesson-title"><?= htmlspecialchars($_cq['title']) ?></span>
+                      <span class="lesson-dur-row">
+                        <span class="lesson-dur-badge lesson-quiz-meta-badge">
+                          mín. <?= number_format((float)$_cq['min_score'], 0) ?>%
+                          &middot; <?= $_cq['scoring_method'] === 'weighted' ? '&#x2696;&#xFE0F; pond.' : '&#xF7; arit.' ?>
+                        </span>
+                      </span>
+                    </div>
+                    <div class="lesson-actions" style="margin-left:auto">
+                      <a href="quizzes.php?action=questions&amp;id=<?= $_cq['id'] ?>" class="btn btn-sm btn-secondary" title="Questões">❓</a>
+                      <a href="quizzes.php?action=edit&amp;id=<?= $_cq['id'] ?>&amp;course_id=<?= $id ?>" class="btn btn-sm" title="Editar">✏️</a>
+                      <form method="post" action="quizzes.php?action=delete&amp;id=<?= $_cq['id'] ?>" style="display:inline"
+                            onsubmit="return confirm('Excluir questionário?')">
+                        <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                        <input type="hidden" name="quiz_id" value="<?= $_cq['id'] ?>">
+                        <button class="btn btn-sm btn-danger" title="Excluir">🗑</button>
+                      </form>
+                    </div>
+                  </li>
+                  <?php endforeach; ?>
+                <?php endif; ?>
                 <?php endforeach; ?>
               </ul>
+              <?php if (!empty($topicData['id']) && isset($quizzesByTopic[(int)$topicData['id']])): ?>
+                <?php foreach ($quizzesByTopic[(int)$topicData['id']] as $_cq): ?>
+                <div class="lesson-quiz-topic-row">
+                  <span class="lesson-quiz-topic-icon">📝</span>
+                  <div class="lesson-info" style="flex:1">
+                    <span class="lesson-title"><?= htmlspecialchars($_cq['title']) ?></span>
+                    <span class="lesson-dur-row">
+                      <span class="lesson-dur-badge lesson-quiz-meta-badge">
+                        mín. <?= number_format((float)$_cq['min_score'], 0) ?>% &middot; Após tópico
+                      </span>
+                    </span>
+                  </div>
+                  <div class="lesson-actions">
+                    <a href="quizzes.php?action=questions&amp;id=<?= $_cq['id'] ?>" class="btn btn-sm btn-secondary" title="Questões">❓</a>
+                    <a href="quizzes.php?action=edit&amp;id=<?= $_cq['id'] ?>&amp;course_id=<?= $id ?>" class="btn btn-sm" title="Editar">✏️</a>
+                    <form method="post" action="quizzes.php?action=delete&amp;id=<?= $_cq['id'] ?>" style="display:inline"
+                          onsubmit="return confirm('Excluir questionário?')">
+                      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                      <input type="hidden" name="quiz_id" value="<?= $_cq['id'] ?>">
+                      <button class="btn btn-sm btn-danger" title="Excluir">🗑</button>
+                    </form>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              <?php endif; ?>
             </div><!-- .topic-group -->
             <?php endforeach; ?>
           </div>
-
+          <?php if (!empty($endOfCourseQuizzes)): ?>
+          <div class="end-course-quiz-section">
+            <div class="lesson-quiz-eoc-header">🏁 Questionário de finalização do curso</div>
+            <?php foreach ($endOfCourseQuizzes as $_cq): ?>
+            <div class="lesson-quiz-topic-row">
+              <span class="lesson-quiz-topic-icon">📝</span>
+              <div class="lesson-info" style="flex:1">
+                <span class="lesson-title"><?= htmlspecialchars($_cq['title']) ?></span>
+                <span class="lesson-dur-row">
+                  <span class="lesson-dur-badge lesson-quiz-meta-badge">
+                    mín. <?= number_format((float)$_cq['min_score'], 0) ?>% &middot; Final do curso
+                  </span>
+                </span>
+              </div>
+              <div class="lesson-actions">
+                <a href="quizzes.php?action=questions&amp;id=<?= $_cq['id'] ?>" class="btn btn-sm btn-secondary" title="Questões">❓</a>
+                <a href="quizzes.php?action=edit&amp;id=<?= $_cq['id'] ?>&amp;course_id=<?= $id ?>" class="btn btn-sm" title="Editar">✏️</a>
+                <form method="post" action="quizzes.php?action=delete&amp;id=<?= $_cq['id'] ?>" style="display:inline"
+                      onsubmit="return confirm('Excluir questionário?')">
+                  <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                  <input type="hidden" name="quiz_id" value="<?= $_cq['id'] ?>">
+                  <button class="btn btn-sm btn-danger" title="Excluir">🗑</button>
+                </form>
+              </div>
+            </div>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
           <?php else: ?>
           <div style="padding:3rem;text-align:center;color:#64748b">
             <div style="font-size:3rem;margin-bottom:1rem">📂</div>

@@ -7,6 +7,7 @@ require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/googledrive.php';
 require_once __DIR__ . '/includes/activity_log.php';
+require_once __DIR__ . '/includes/quiz.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
@@ -89,11 +90,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
         $newProgress    = $model->getProgress($userId, $course['id']);
         $done           = count($newProgress);
         $courseComplete = $done >= $total;
-        $certUrl        = '';
-        if ($courseComplete) {
-            require_once __DIR__ . '/includes/certificate.php';
-            $certUrl = APP_URL . '/certificate.php?course=' . urlencode($course['slug']);
+
+        // ── Verifica questionários pendentes ──────────────────────────────
+        require_once __DIR__ . '/includes/quiz.php';
+        $quizModel = new QuizModel();
+        $quizUrl   = '';
+
+        // 1. Quiz após esta aula específica?
+        $pendingQuiz = $quizModel->getPendingQuizAfterLesson($completedLessonId, $userId, $course['id']);
+
+        // 2. Quiz após tópico? (se todas as aulas do tópico foram concluídas)
+        if (!$pendingQuiz) {
+            $topicId = $quizModel->getLessonTopicId($completedLessonId);
+            if ($topicId && $quizModel->isTopicComplete($topicId, $userId, $course['id'])) {
+                $pendingQuiz = $quizModel->getPendingQuizAfterTopic($topicId, $userId, $course['id']);
+            }
         }
+
+        // 3. Quiz de fim de curso?
+        if (!$pendingQuiz && $courseComplete) {
+            $pendingQuiz = $quizModel->getPendingEndOfCourseQuiz($course['id'], $userId);
+        }
+
+        if ($pendingQuiz) {
+            $quizUrl = APP_URL . '/quiz.php?quiz_id=' . $pendingQuiz['id']
+                     . '&course_slug=' . urlencode($course['slug']);
+        }
+
+        $certUrl = '';
+        if ($courseComplete && !$pendingQuiz) {
+            $allPassed = $quizModel->allQuizzesPassed($userId, $course['id']);
+            if ($allPassed) {
+                require_once __DIR__ . '/includes/certificate.php';
+                $certUrl = APP_URL . '/certificate.php?course=' . urlencode($course['slug']);
+            }
+        }
+
         echo json_encode([
             'ok'             => true,
             'progress'       => $total ? round($done / $total * 100) : 0,
@@ -101,6 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
             'total'          => $total,
             'course_complete'=> $courseComplete,
             'cert_url'       => $certUrl,
+            'quiz_url'       => $quizUrl,
         ]);
         exit;
     }
@@ -114,6 +147,26 @@ $nextLesson   = $currentIndex < count($lessons) - 1 ? $lessons[$currentIndex + 1
 
 $embedUrl = GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']);
 $pct = count($lessons) ? round(count($progress) / count($lessons) * 100) : 0;
+
+// Carrega questionários para exibição na sidebar
+$_qModel          = new QuizModel();
+$_allQuizzes      = $_qModel->getQuizzesByCourse($course['id']);
+$quizzesByLesson  = [];
+$quizzesByTopic   = [];
+$quizEndOfCourse  = [];
+foreach ($_allQuizzes as $_q) {
+    if ($_q['placement_type'] === 'after_lesson' && $_q['placement_id']) {
+        $quizzesByLesson[(int)$_q['placement_id']][] = $_q;
+    } elseif ($_q['placement_type'] === 'after_topic' && $_q['placement_id']) {
+        $quizzesByTopic[(int)$_q['placement_id']][] = $_q;
+    } else {
+        $quizEndOfCourse[] = $_q;
+    }
+}
+$quizBestAttempts = [];
+foreach ($_allQuizzes as $_q) {
+    $quizBestAttempts[$_q['id']] = $_qModel->getBestAttempt((int)$_q['id'], $userId);
+}
 
 siteHeader($lesson['title'] . ' - ' . $course['title']);
 ?>
@@ -157,7 +210,31 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
             </a>
             <?php endif; ?>
           </li>
+          <?php if (isset($quizzesByLesson[$l['id']])): ?>
+            <?php foreach ($quizzesByLesson[$l['id']] as $_qv): ?>
+            <?php $_qA = $quizBestAttempts[$_qv['id']] ?? null; $_qP = $_qA && (int)$_qA['passed']; ?>
+            <li class="watch-lesson-item watch-quiz-item <?= $group['topic'] ? 'indented' : '' ?> <?= $_qP ? 'done' : '' ?>">
+              <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
+                <span class="wl-index wl-quiz-icon">📝</span>
+                <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
+                <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+              </a>
+            </li>
+            <?php endforeach; ?>
+          <?php endif; ?>
           <?php endforeach; ?>
+          <?php if (!empty($group['topic']['id']) && isset($quizzesByTopic[(int)$group['topic']['id']])): ?>
+            <?php foreach ($quizzesByTopic[(int)$group['topic']['id']] as $_qv): ?>
+            <?php $_qA = $quizBestAttempts[$_qv['id']] ?? null; $_qP = $_qA && (int)$_qA['passed']; ?>
+            <li class="watch-lesson-item watch-quiz-item <?= $_qP ? 'done' : '' ?>">
+              <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
+                <span class="wl-index wl-quiz-icon">📝</span>
+                <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
+                <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+              </a>
+            </li>
+            <?php endforeach; ?>
+          <?php endif; ?>
         <?php endforeach; ?>
       <?php else: ?>
         <?php foreach ($lessons as $i => $l): ?>
@@ -177,8 +254,30 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
           </a>
           <?php endif; ?>
         </li>
+        <?php if (isset($quizzesByLesson[$l['id']])): ?>
+          <?php foreach ($quizzesByLesson[$l['id']] as $_qv): ?>
+          <?php $_qA = $quizBestAttempts[$_qv['id']] ?? null; $_qP = $_qA && (int)$_qA['passed']; ?>
+          <li class="watch-lesson-item watch-quiz-item <?= $_qP ? 'done' : '' ?>">
+            <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
+              <span class="wl-index wl-quiz-icon">📝</span>
+              <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
+              <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+            </a>
+          </li>
+          <?php endforeach; ?>
+        <?php endif; ?>
         <?php endforeach; ?>
       <?php endif; ?>
+      <?php foreach ($quizEndOfCourse as $_qv): ?>
+        <?php $_qA = $quizBestAttempts[$_qv['id']] ?? null; $_qP = $_qA && (int)$_qA['passed']; ?>
+        <li class="watch-lesson-item watch-quiz-item watch-quiz-eoc <?= $_qP ? 'done' : '' ?>">
+          <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
+            <span class="wl-index wl-quiz-icon">📝</span>
+            <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
+            <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+          </a>
+        </li>
+      <?php endforeach; ?>
     </ol>
   </aside>
 
@@ -354,12 +453,53 @@ function markComplete(btn) {
                 // Marca item da lista como concluído
                 document.querySelectorAll('.watch-lesson-item.active')
                         .forEach(i => i.classList.add('done'));
-                // Curso 100% completo → exibe banner do certificado
-                if (data.course_complete && data.cert_url) {
+                // Curso 100% completo → exibe banner do certificado ou do questionário
+                if (data.quiz_url) {
+                    showQuizBanner(data.quiz_url);
+                } else if (data.course_complete && data.cert_url) {
                     showCertBanner(data.cert_url);
                 }            }
         });
 }
+/* ── Banner de questionário pendente ────────────────── */
+function showQuizBanner(quizUrl) {
+    const banner = document.createElement('div');
+    banner.id = 'quizBanner';
+    banner.innerHTML = `
+        <div style="
+            position:fixed;inset:0;background:rgba(0,0,0,.65);
+            display:flex;align-items:center;justify-content:center;
+            z-index:9999;font-family:system-ui,sans-serif;
+        ">
+            <div style="
+                background:#0f172a;border:2px solid #3b82f6;
+                border-radius:.75rem;padding:2rem 2.5rem;
+                text-align:center;max-width:420px;width:90%;
+                box-shadow:0 20px 60px rgba(0,0,0,.5);
+            ">
+                <div style="font-size:3rem;margin-bottom:.5rem">📝</div>
+                <h2 style="color:#f1f5f9;font-size:1.4rem;margin-bottom:.5rem">Questionário disponível!</h2>
+                <p style="color:#94a3b8;margin-bottom:1.5rem;font-size:.95rem">
+                    Há um questionário para responder antes de prosseguir.
+                    Você precisa ser aprovado para obter o certificado.
+                </p>
+                <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+                    <a href="${quizUrl}" style="
+                        background:#3b82f6;color:#fff;
+                        padding:.55rem 1.4rem;border-radius:.35rem;
+                        font-weight:700;text-decoration:none;font-size:.95rem;
+                    ">📝 Responder questionário</a>
+                    <button onclick="document.getElementById('quizBanner').remove()" style="
+                        background:#334155;color:#f1f5f9;
+                        padding:.55rem 1.1rem;border-radius:.35rem;
+                        border:none;cursor:pointer;font-size:.95rem;
+                    ">Depois</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(banner);
+}
+
 /* ── Banner de conclusão do curso ──────────────────── */
 function showCertBanner(certUrl) {
     const banner = document.createElement('div');
