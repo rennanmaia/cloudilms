@@ -32,6 +32,9 @@ function adminHeader(string $title, string $activePage = ''): void {
       <a href="<?= $appUrl ?>/admin/users.php" class="nav-item <?= $activePage==='users'?'active':'' ?>">
         <span class="nav-icon">👥</span> Alunos
       </a>
+      <a href="<?= $appUrl ?>/admin/enrollments.php" class="nav-item <?= $activePage==='enrollments'?'active':'' ?>">
+        <span class="nav-icon">📋</span> Matrículas
+      </a>
       <a href="<?= $appUrl ?>/admin/trails.php" class="nav-item <?= $activePage==='trails'?'active':'' ?>">
         <span class="nav-icon">🗺️</span> Trilhas
       </a>

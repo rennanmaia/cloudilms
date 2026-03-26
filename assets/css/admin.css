@@ -478,3 +478,22 @@ hr { border: none; border-top: 1px solid var(--bg3); }
 }
 .row-done td { opacity: .55; }
 .row-done td:first-child::before { content: '✅ '; }
+
+/* ── Enrollments admin ──────────────────────────────────────────────────── */
+.enroll-hidden { display: none; }
+
+.enroll-pagination { display: flex; gap: .35rem; flex-wrap: wrap; }
+
+.enroll-progress-wrap {
+  display: flex; align-items: center; gap: .5rem; min-width: 130px;
+}
+.enroll-progress-bar {
+  flex: 1; height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden;
+}
+.enroll-progress-fill {
+  height: 6px; background: var(--success); border-radius: 3px;
+  transition: width .3s;
+}
+.enroll-progress-label {
+  font-size: .775rem; color: var(--text3); white-space: nowrap;
+}
