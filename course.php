@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/activity_log.php';
+require_once __DIR__ . '/includes/certificate.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth  = new Auth();
@@ -77,8 +78,21 @@ siteHeader($course['title']);
       <?php elseif (!$enrolled): ?>
         <a href="course.php?slug=<?= urlencode($slug) ?>&enroll=1" class="btn-hero">🎓 Matricular-se gratuitamente</a>
       <?php else: ?>
-        <?php if ($lessons): ?>
-        <a href="watch.php?lesson=<?= $lessons[0]['id'] ?>" class="btn-hero">▶ Continuar assistindo</a>
+        <?php if ($lessons):
+          $courseComplete   = count($progress) >= count($lessons);
+          $firstIncomplete  = null;
+          foreach ($lessons as $l) {
+              if (!in_array($l['id'], $progress)) { $firstIncomplete = $l; break; }
+          }
+          $resumeId = $firstIncomplete ? $firstIncomplete['id'] : $lessons[0]['id'];
+          $certUrl  = APP_URL . '/certificate.php?course=' . urlencode($slug);
+        ?>
+          <?php if ($courseComplete): ?>
+          <a href="<?= $certUrl ?>" class="btn-hero btn-cert">📜 Ver Certificado</a>
+          <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero btn-hero-alt" style="margin-top:.5rem">▶ Rever aulas</a>
+          <?php else: ?>
+          <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero">▶ Continuar assistindo</a>
+          <?php endif; ?>
         <?php endif; ?>
       <?php endif; ?>
     </div>

@@ -37,12 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break;
                 }
                 $data = [
-                    'title'             => trim($_POST['title'] ?? ''),
-                    'description'       => trim($_POST['description'] ?? ''),
-                    'thumbnail'         => trim($_POST['thumbnail'] ?? ''),
-                    'gdrive_folder_id'  => $folderId,
-                    'gdrive_folder_url' => $folderUrl,
-                    'published'         => isset($_POST['published']) ? 1 : 0,
+                    'title'               => trim($_POST['title'] ?? ''),
+                    'description'         => trim($_POST['description'] ?? ''),
+                    'thumbnail'           => trim($_POST['thumbnail'] ?? ''),
+                    'gdrive_folder_id'    => $folderId,
+                    'gdrive_folder_url'   => $folderUrl,
+                    'published'           => isset($_POST['published']) ? 1 : 0,
+                    'extra_hours_minutes' => max(0, (int)($_POST['extra_hours_minutes'] ?? 0)),
                 ];
                 if (!$data['title']) { $error = 'Título é obrigatório.'; break; }
 
@@ -149,7 +150,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lessonId        = (int)($_POST['lesson_id'] ?? 0);
                 $preventSeek     = (int)(bool)($_POST['prevent_seek']     ?? 0);
                 $forceSequential = (int)(bool)($_POST['force_sequential'] ?? 0);
-                if ($lessonId) $model->updateLessonSettings($lessonId, $preventSeek, $forceSequential);
+                $requireWatch    = (int)(bool)($_POST['require_watch']    ?? 0);
+                if ($lessonId) $model->updateLessonSettings($lessonId, $preventSeek, $forceSequential, $requireWatch);
                 header('Content-Type: application/json');
                 echo json_encode(['ok' => true]);
                 exit;
@@ -262,7 +264,14 @@ if ($action === 'new' || $action === 'edit') {
             </label>
           </div>
 
-          <div style="display:flex;gap:1rem;margin-top:1.5rem">
+          <div class="form-group">
+            <label>Minutos extras de carga horária</label>
+            <input type="number" name="extra_hours_minutes" min="0" max="9999"
+                   value="<?= (int)($course['extra_hours_minutes'] ?? 0) ?>"
+                   class="form-control" style="max-width:140px">
+            <small class="help-text">Minutos adicionais além da duração dos vídeos (ex: tempo estimado de avaliações). Usado no certificado.</small>
+          </div>
+
             <button type="submit" class="btn btn-primary">💾 Salvar curso</button>
             <a href="courses.php" class="btn">Cancelar</a>
           </div>

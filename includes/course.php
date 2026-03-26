@@ -57,16 +57,17 @@ class CourseModel {
         $stmt = $this->db->prepare(
             'UPDATE courses SET title=:title, description=:description, thumbnail=:thumbnail,
              gdrive_folder_id=:gdrive_folder_id, gdrive_folder_url=:gdrive_folder_url,
-             published=:published WHERE id=:id'
+             published=:published, extra_hours_minutes=:extra_hours_minutes WHERE id=:id'
         );
         return $stmt->execute([
-            ':title'             => $data['title'],
-            ':description'       => $data['description'] ?? '',
-            ':thumbnail'         => $data['thumbnail'] ?? '',
-            ':gdrive_folder_id'  => $data['gdrive_folder_id'],
-            ':gdrive_folder_url' => $data['gdrive_folder_url'],
-            ':published'         => (int)($data['published'] ?? 0),
-            ':id'                => $id,
+            ':title'               => $data['title'],
+            ':description'         => $data['description'] ?? '',
+            ':thumbnail'           => $data['thumbnail'] ?? '',
+            ':gdrive_folder_id'    => $data['gdrive_folder_id'],
+            ':gdrive_folder_url'   => $data['gdrive_folder_url'],
+            ':published'           => (int)($data['published'] ?? 0),
+            ':extra_hours_minutes' => (int)($data['extra_hours_minutes'] ?? 0),
+            ':id'                  => $id,
         ]);
     }
 
@@ -252,10 +253,10 @@ class CourseModel {
         $this->db->prepare('UPDATE lessons SET sort_order = ? WHERE id = ?')->execute([$order, $lessonId]);
     }
 
-    public function updateLessonSettings(int $lessonId, int $preventSeek, int $forceSequential): void {
+    public function updateLessonSettings(int $lessonId, int $preventSeek, int $forceSequential, int $requireWatch = 1): void {
         $this->db->prepare(
-            'UPDATE lessons SET prevent_seek = ?, force_sequential = ? WHERE id = ?'
-        )->execute([$preventSeek, $forceSequential, $lessonId]);
+            'UPDATE lessons SET prevent_seek = ?, force_sequential = ?, require_watch = ? WHERE id = ?'
+        )->execute([$preventSeek, $forceSequential, $requireWatch, $lessonId]);
     }
 
     public function deleteLesson(int $id): void {

@@ -38,12 +38,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $params[':password'] = password_hash($pass, PASSWORD_BCRYPT);
                     }
                     $db->prepare("UPDATE users SET {$updates} WHERE id=:id")->execute($params);
-                    $message = 'Usuário atualizado.';
+                    header('Location: users.php?action=edit&id=' . $id . '&msg=' . urlencode('Usuário atualizado com sucesso.'));
+                    exit;
                 } else {
                     if (strlen($pass) < 6) { $error = 'Senha mínima de 6 caracteres.'; goto render; }
                     $db->prepare('INSERT INTO users (name,email,password,role,active,created_at) VALUES (?,?,?,?,?,NOW())')
                        ->execute([$name,$email,password_hash($pass,PASSWORD_BCRYPT),$role,$active]);
-                    $message = 'Usuário criado com sucesso.';
+                    header('Location: users.php?msg=' . urlencode('Usuário criado com sucesso.'));
+                    exit;
                 }
             }
         }
@@ -102,8 +104,10 @@ if ($action === 'list' || (!$action)) {
 if ($action === 'new' || $action === 'edit') {
     $user = $id ? $db->prepare('SELECT * FROM users WHERE id = ?') : null;
     if ($id) { $user->execute([$id]); $user = $user->fetch(); }
+    $message = !$message && !empty($_GET['msg']) ? htmlspecialchars($_GET['msg']) : $message;
     adminHeader($id ? 'Editar Usuário' : 'Novo Usuário', 'users');
     ?>
+    <?php if ($message): ?><div class="alert alert-success"><?= $message ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <div class="card">
       <div class="card-header"><h2><?= $id ? 'Editar Usuário' : 'Novo Usuário' ?></h2></div>

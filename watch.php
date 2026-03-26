@@ -38,6 +38,7 @@ $progress = $model->getProgress($userId, $course['id']);
 // Flags da aula atual (por aula)
 $forceSequential = !empty($lesson['force_sequential']);
 $preventSeek     = !empty($lesson['prevent_seek']);
+$requireWatch    = !empty($lesson['require_watch']);   // 1 = exige 75%; 0 = conclusão manual livre
 
 // Pre-calcula quais aulas estão bloqueadas:
 // Aula N está bloqueada se ela tem force_sequential=1 e a aula N-1 não foi concluída.
@@ -68,7 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
         $completedLessonId = (int)$_POST['lesson_id'];
         $duration          = (int)($lesson['duration_seconds'] ?? 0);
         $watched           = (int)($_POST['watched_seconds'] ?? 0);
-        $minRequired       = $duration > 0 ? (int)floor($duration * 0.75) : 0;
+        $minRequired       = ($duration > 0 && !empty($lesson['require_watch']))
+                             ? (int)floor($duration * 0.75) : 0;
 
         if ($minRequired > 0 && $watched < $minRequired) {
             header('Content-Type: application/json');
@@ -83,9 +85,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mark_complete'])) {
             'entity_title' => $lesson['title'],
         ]);
         header('Content-Type: application/json');
-        $total    = count($lessons);
-        $done     = count($model->getProgress($userId, $course['id']));
-        echo json_encode(['ok' => true, 'progress' => $total ? round($done / $total * 100) : 0, 'done' => $done, 'total' => $total]);
+        $total          = count($lessons);
+        $newProgress    = $model->getProgress($userId, $course['id']);
+        $done           = count($newProgress);
+        $courseComplete = $done >= $total;
+        $certUrl        = '';
+        if ($courseComplete) {
+            require_once __DIR__ . '/includes/certificate.php';
+            $certUrl = APP_URL . '/certificate.php?course=' . urlencode($course['slug']);
+        }
+        echo json_encode([
+            'ok'             => true,
+            'progress'       => $total ? round($done / $total * 100) : 0,
+            'done'           => $done,
+            'total'          => $total,
+            'course_complete'=> $courseComplete,
+            'cert_url'       => $certUrl,
+        ]);
         exit;
     }
     exit;
@@ -197,7 +213,7 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
         <?php endif; ?>
 
         <?php $isDone = in_array($lessonId, $progress); ?>
-        <?php $needsWatch = !$isDone && $lesson['duration_seconds']; ?>
+        <?php $needsWatch = !$isDone && $requireWatch && $lesson['duration_seconds']; ?>
         <button id="markBtn" class="btn btn-complete <?= $isDone ? 'btn-done' : '' ?> <?= $needsWatch ? 'btn-locked' : '' ?>"
                 <?= $needsWatch ? 'disabled' : '' ?>
                 data-lesson="<?= $lessonId ?>" onclick="markComplete(this)">
@@ -216,9 +232,12 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
 /* ── Configurações vindas do servidor ────────────────── */
 const LESSON_ID       = <?= $lessonId ?>;
 const LESSON_DURATION = <?= (int)($lesson['duration_seconds'] ?? 0) ?>;  // segundos
-const PREVENT_SEEK    = <?= $preventSeek     ? 'true' : 'false' ?>;
+const PREVENT_SEEK    = <?= $preventSeek  ? 'true' : 'false' ?>;
+const REQUIRE_WATCH   = <?= $requireWatch ? 'true' : 'false' ?>;
 const ALREADY_DONE    = <?= in_array($lessonId, $progress) ? 'true' : 'false' ?>;
-const MIN_WATCH_SECS  = LESSON_DURATION > 0 ? Math.floor(LESSON_DURATION * 0.75) : 0;
+const MIN_WATCH_SECS  = (REQUIRE_WATCH && LESSON_DURATION > 0) ? Math.floor(LESSON_DURATION * 0.75) : 0;
+const COURSE_SLUG     = '<?= addslashes($course['slug']) ?>';
+const APP_BASE        = '<?= APP_URL ?>';
 
 /* ── Referências DOM ─────────────────────────────────── */
 const iframe    = document.getElementById('lessonIframe');
@@ -335,8 +354,48 @@ function markComplete(btn) {
                 // Marca item da lista como concluído
                 document.querySelectorAll('.watch-lesson-item.active')
                         .forEach(i => i.classList.add('done'));
-            }
+                // Curso 100% completo → exibe banner do certificado
+                if (data.course_complete && data.cert_url) {
+                    showCertBanner(data.cert_url);
+                }            }
         });
+}
+/* ── Banner de conclusão do curso ──────────────────── */
+function showCertBanner(certUrl) {
+    const banner = document.createElement('div');
+    banner.id = 'certBanner';
+    banner.innerHTML = `
+        <div style="
+            position:fixed;inset:0;background:rgba(0,0,0,.65);
+            display:flex;align-items:center;justify-content:center;
+            z-index:9999;font-family:system-ui,sans-serif;
+        ">
+            <div style="
+                background:#0f172a;border:2px solid #c9a84c;
+                border-radius:.75rem;padding:2rem 2.5rem;
+                text-align:center;max-width:420px;width:90%;
+                box-shadow:0 20px 60px rgba(0,0,0,.5);
+            ">
+                <div style="font-size:3rem;margin-bottom:.5rem">🎉</div>
+                <h2 style="color:#f1f5f9;font-size:1.4rem;margin-bottom:.5rem">Curso conclu\u00eddo!</h2>
+                <p style="color:#94a3b8;margin-bottom:1.5rem;font-size:.95rem">
+                    Parab\u00e9ns! Voc\u00ea concluiu todas as aulas e j\u00e1 pode obter seu certificado.
+                </p>
+                <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+                    <a href="${certUrl}" style="
+                        background:#c9a84c;color:#1a0a00;
+                        padding:.55rem 1.4rem;border-radius:.35rem;
+                        font-weight:700;text-decoration:none;font-size:.95rem;
+                    ">📜 Ver Certificado</a>
+                    <button onclick="document.getElementById('certBanner').remove()" style="
+                        background:#334155;color:#f1f5f9;
+                        padding:.55rem 1.1rem;border-radius:.35rem;
+                        border:none;cursor:pointer;font-size:.95rem;
+                    ">Fechar</button>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(banner);
 }
 </script>
 

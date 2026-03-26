@@ -99,13 +99,16 @@ a:hover { color: var(--primary2); }
 .course-hero-info h1 { font-size: 1.75rem; margin-bottom: .75rem; }
 .course-hero-desc  { color: var(--text2); margin-bottom: 1rem; }
 .course-hero-meta  { display: flex; gap: 1.5rem; color: var(--text3); font-size: .9rem; margin-bottom: 1.25rem; }
-.btn-hero {
-  display: inline-block; padding: .75rem 1.75rem;
+.btn-hero { display: inline-block; padding: .75rem 1.75rem;
   background: var(--primary); color: var(--bg);
   font-weight: 700; border-radius: 9999px; font-size: 1rem;
   transition: background .2s;
 }
 .btn-hero:hover { background: var(--primary2); color: var(--bg); }
+.btn-cert { background: #c9a84c; color: #1a0a00; }
+.btn-cert:hover { background: #b8973e; color: #1a0a00; }
+.btn-hero-alt { background: var(--bg3); color: var(--text); display: block; }
+.btn-hero-alt:hover { background: var(--bg4); color: var(--text); }
 
 /* ── Lesson list (course page) ──────────────── */
 .lesson-list-public h2 { font-size: 1.25rem; margin-bottom: 1rem; }

@@ -31,6 +31,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $save->execute(['gdrive_api_key'    , encryptValue($apiKey)  , encryptValue($apiKey)]);
         $save->execute(['allow_registration', $allowReg              , $allowReg]);
 
+        // Configurações do certificado
+        $certIssuer  = trim($_POST['cert_issuer']        ?? '');
+        $certTitle   = trim($_POST['cert_title']         ?? 'Certificado de Conclusão');
+        $certBody    = trim($_POST['cert_body']          ?? '');
+        $certPrimary = trim($_POST['cert_primary_color'] ?? '#1e293b');
+        $certAccent  = trim($_POST['cert_accent_color']  ?? '#c9a84c');
+        $certFooter  = trim($_POST['cert_footer']        ?? '');
+        $save->execute(['cert_issuer',        $certIssuer,  $certIssuer]);
+        $save->execute(['cert_title',         $certTitle,   $certTitle]);
+        $save->execute(['cert_body',          $certBody,    $certBody]);
+        $save->execute(['cert_primary_color', $certPrimary, $certPrimary]);
+        $save->execute(['cert_accent_color',  $certAccent,  $certAccent]);
+        $save->execute(['cert_footer',        $certFooter,  $certFooter]);
         // Teste de conexão
         if ($testFolder && $apiKey) {
             $gd = new GoogleDrive();
@@ -107,6 +120,60 @@ adminHeader('Configurações', 'settings');
       </div>
 
       <button type="submit" class="btn btn-primary">💾 Salvar configurações</button>
+    </form>
+  </div>
+</div>
+
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header"><h2>📜 Certificados</h2></div>
+  <div class="card-body">
+    <form method="post">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+
+      <div class="form-group">
+        <label>Nome do emissor</label>
+        <input type="text" name="cert_issuer"
+               value="<?= htmlspecialchars($settings['cert_issuer'] ?? '') ?>"
+               class="form-control" placeholder="Ex: Instituto CloudiLMS">
+        <small class="help-text">Aparece como assinatura no certificado.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Título do certificado</label>
+        <input type="text" name="cert_title"
+               value="<?= htmlspecialchars($settings['cert_title'] ?? 'Certificado de Conclusão') ?>"
+               class="form-control">
+      </div>
+
+      <div class="form-group">
+        <label>Texto do corpo</label>
+        <textarea name="cert_body" rows="3" class="form-control"><?= htmlspecialchars($settings['cert_body'] ?? '{student_name} concluiu com êxito o curso {course_name}, com carga horária de {workload}.') ?></textarea>
+        <small class="help-text">Variáveis disponíveis: <code>{student_name}</code> <code>{course_name}</code> <code>{workload}</code> <code>{issued_date}</code> <code>{issuer}</code></small>
+      </div>
+
+      <div class="form-group">
+        <label>Texto de rodapé (opcional)</label>
+        <input type="text" name="cert_footer"
+               value="<?= htmlspecialchars($settings['cert_footer'] ?? '') ?>"
+               class="form-control" placeholder="Ex: Este certificado pode ser verificado em nosso site.">
+      </div>
+
+      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <div class="form-group" style="flex:1;min-width:160px">
+          <label>Cor primária</label>
+          <input type="color" name="cert_primary_color"
+                 value="<?= htmlspecialchars($settings['cert_primary_color'] ?? '#1e293b') ?>"
+                 class="form-control" style="height:2.5rem;padding:.25rem">
+        </div>
+        <div class="form-group" style="flex:1;min-width:160px">
+          <label>Cor de destaque</label>
+          <input type="color" name="cert_accent_color"
+                 value="<?= htmlspecialchars($settings['cert_accent_color'] ?? '#c9a84c') ?>"
+                 class="form-control" style="height:2.5rem;padding:.25rem">
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary">💾 Salvar certificado</button>
     </form>
   </div>
 </div>

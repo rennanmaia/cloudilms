@@ -24,7 +24,8 @@ function auditActionMeta(string $action): array {
         'course_view'     => ['Curso aberto',    'badge-info',      '🎓'],
         'lesson_view'     => ['Aula iniciada',   'badge-warning',   '▶️'],
         'lesson_complete' => ['Aula concluída',  'badge-success',   '✅'],
-        'course_enroll'   => ['Matriculou',      'badge-info',      '📝'],
+        'course_enroll'      => ['Matriculou',          'badge-info',      '📝'],
+        'certificate_issued' => ['Certificado emitido', 'badge-success',   '📜'],
     ];
     return $map[$action] ?? [$action, 'badge-secondary', '•'];
 }
