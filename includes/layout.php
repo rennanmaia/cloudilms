@@ -22,7 +22,9 @@ function siteHeader(string $title): void {
   <div class="container header-inner">
     <a href="<?= $appUrl ?>/" class="site-logo">☁️ <?= htmlspecialchars($appName) ?></a>
     <nav class="site-nav">
-      <a href="<?= $appUrl ?>/index.php">Cursos</a>
+      <?php if ($logged): ?>
+        <a href="<?= $appUrl ?>/index.php">Cursos</a>
+      <?php endif; ?>
       <?php if ($logged): ?>
         <a href="<?= $appUrl ?>/dashboard.php">Meus Cursos</a>
         <a href="<?= $appUrl ?>/trails.php">Minhas Trilhas</a>

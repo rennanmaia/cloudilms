@@ -198,6 +198,40 @@ a:hover { color: var(--primary2); }
 .btn-locked:hover { background: var(--bg3); opacity: .7; }
 .w-full { width: 100%; text-align: center; }
 
+/* ── Guest landing ─────────────────────────── */
+.guest-landing { padding: 2rem 0; }
+.guest-hero {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 3rem;
+  align-items: center;
+  min-height: calc(100vh - 200px);
+  padding: 2rem 0;
+}
+@media (max-width: 860px) {
+  .guest-hero { grid-template-columns: 1fr; gap: 2rem; min-height: unset; }
+}
+.guest-hero-text h1 {
+  font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem; line-height: 1.2;
+}
+.guest-hero-sub {
+  font-size: 1.1rem; color: var(--text2); margin-bottom: 1.75rem; max-width: 480px;
+}
+.guest-features {
+  list-style: none; display: flex; flex-direction: column; gap: .75rem;
+}
+.guest-features li {
+  font-size: 1rem; color: var(--text2);
+  display: flex; align-items: center; gap: .5rem;
+}
+.guest-login-card {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); padding: 2rem;
+}
+.guest-login-title {
+  font-size: 1.25rem; font-weight: 700; margin-bottom: 1.5rem; text-align: center;
+}
+
 /* ── Auth ───────────────────────────────────── */
 .auth-wrap { display: flex; justify-content: center; align-items: flex-start; padding-top: 3rem; }
 .auth-box {
