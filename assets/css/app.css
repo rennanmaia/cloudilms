@@ -66,6 +66,10 @@ a:hover { color: var(--primary2); }
   gap: 1.5rem;
   margin-top: 2rem;
 }
+/* course-card-wrap sits inside the grid cell */
+.course-card-wrap .course-card {
+  border-radius: var(--radius) var(--radius) 0 0;
+}
 .course-card {
   background: var(--bg2);
   border: 1px solid var(--bg3);
@@ -294,6 +298,36 @@ a:hover { color: var(--primary2); }
 .empty-state p   { color: var(--text3); }
 
 .page-heading { font-size: 1.75rem; font-weight: 700; margin-bottom: 1.5rem; }
+
+/* ── Front-end alerts ───────────────────────────────── */
+.alert-front {
+  padding: .75rem 1.1rem; border-radius: .5rem;
+  margin-bottom: 1.25rem; font-size: .93rem;
+}
+.alert-front-success { background: #052e16; color: #86efac; border: 1px solid #14532d; }
+
+/* ── Dashboard course card with unenroll ────────────── */
+.course-card-wrap { position: relative; display: flex; flex-direction: column; }
+.course-card-wrap .course-card { flex: 1; }
+.course-unenroll-form { margin: 0; }
+.btn-unenroll {
+  display: block; width: 100%;
+  padding: .35rem .75rem; text-align: center;
+  background: rgba(239,68,68,.07); border: 1px solid rgba(239,68,68,.2);
+  border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+  color: #fca5a5; font-size: .78rem; cursor: pointer;
+  transition: background .15s;
+}
+.btn-unenroll:hover { background: rgba(239,68,68,.18); }
+
+/* Cancel enroll on course page */
+.btn-unenroll-course {
+  background: none; border: none; color: var(--text3);
+  font-size: .8rem; cursor: pointer; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px;
+  transition: color .15s;
+}
+.btn-unenroll-course:hover { color: #fca5a5; }
 
 /* ── Dashboard trails bar ───────────────────────────── */
 .dashboard-trails-bar {

@@ -24,7 +24,8 @@ function auditActionMeta(string $action): array {
         'course_view'     => ['Curso aberto',    'badge-info',      '🎓'],
         'lesson_view'     => ['Aula iniciada',   'badge-warning',   '▶️'],
         'lesson_complete' => ['Aula concluída',  'badge-success',   '✅'],
-        'course_enroll'      => ['Matriculou',          'badge-info',      '📝'],
+        'course_enroll'      => ['Matriculou',               'badge-info',      '📝'],
+        'course_unenroll'    => ['Cancelou matrícula',         'badge-danger',    '❌'],
         'certificate_issued' => ['Certificado emitido', 'badge-success',   '📜'],
     ];
     return $map[$action] ?? [$action, 'badge-secondary', '•'];
@@ -302,7 +303,7 @@ $filterFrom   = $_GET['from'] ?? '';
 $filterTo     = $_GET['to']   ?? '';
 $filterSearch = trim($_GET['q'] ?? '');
 
-$allowedActions = ['login','login_failed','logout','page_view','course_view','lesson_view','lesson_complete','course_enroll'];
+$allowedActions = ['login','login_failed','logout','page_view','course_view','lesson_view','lesson_complete','course_enroll','course_unenroll'];
 if ($filterAction && !in_array($filterAction, $allowedActions, true)) $filterAction = '';
 
 // Build parameterized WHERE clause

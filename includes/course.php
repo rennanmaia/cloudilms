@@ -283,15 +283,29 @@ class CourseModel {
         $stmt->execute([$userId, $courseId]);
     }
 
+    /**
+     * Cancela matrícula: remove enrollment, progresso e certificado.
+     * Os registros de activity_log são mantidos intencionalmente.
+     */
+    public function cancelEnrollment(int $userId, int $courseId): void {
+        $this->db->prepare('DELETE FROM enrollments WHERE user_id = ? AND course_id = ?')
+                 ->execute([$userId, $courseId]);
+        $this->db->prepare('DELETE FROM progress WHERE user_id = ? AND course_id = ?')
+                 ->execute([$userId, $courseId]);
+        $this->db->prepare('DELETE FROM certificates WHERE user_id = ? AND course_id = ?')
+                 ->execute([$userId, $courseId]);
+    }
+
     public function getEnrolledCourses(int $userId): array {
         $stmt = $this->db->prepare(
             'SELECT c.*, e.enrolled_at,
                     (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lesson_count,
-                    (SELECT COUNT(*) FROM progress p WHERE p.user_id = ? AND p.course_id = c.id AND p.completed = 1) AS completed_count
+                    (SELECT COUNT(*) FROM progress p WHERE p.user_id = ? AND p.course_id = c.id AND p.completed = 1) AS completed_count,
+                    (SELECT cert_code FROM certificates WHERE user_id = ? AND course_id = c.id LIMIT 1) AS cert_code
              FROM courses c JOIN enrollments e ON c.id = e.course_id
              WHERE e.user_id = ? ORDER BY e.enrolled_at DESC'
         );
-        $stmt->execute([$userId, $userId]);
+        $stmt->execute([$userId, $userId, $userId]);
         return $stmt->fetchAll();
     }
 

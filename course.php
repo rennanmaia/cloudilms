@@ -20,6 +20,30 @@ if (!$slug) { header('Location: ' . APP_URL . '/index.php'); exit; }
 $course = $model->getCourseBySlug($slug);
 if (!$course) { http_response_code(404); siteHeader('Curso não encontrado'); echo '<div class="empty-state"><h2>Curso não encontrado</h2></div>'; siteFooter(); exit; }
 
+// CSRF
+if (!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+$csrf = $_SESSION['csrf_token'];
+
+// Cancelar matrícula (aluno)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'cancel_enrollment') {
+    if (($_POST['csrf'] ?? '') !== $csrf) { http_response_code(403); exit('Forbidden'); }
+    $logged = $auth->isLoggedIn();
+    $uid    = $logged ? (int)$_SESSION['user_id'] : 0;
+    if ($uid && $model->isEnrolled($uid, $course['id'])) {
+        $model->cancelEnrollment($uid, $course['id']);
+        ActivityLog::record('course_unenroll', [
+            'entity_type'  => 'course',
+            'entity_id'    => $course['id'],
+            'entity_title' => $course['title'],
+        ]);
+    }
+    header('Location: course.php?slug=' . urlencode($slug) . '&notice=unenrolled');
+    exit;
+}
+
+$course = $model->getCourseBySlug($slug);
+if (!$course) { http_response_code(404); siteHeader('Curso não encontrado'); echo '<div class="empty-state"><h2>Curso não encontrado</h2></div>'; siteFooter(); exit; }
+
 $lessons  = $model->getLessonsByCourse($course['id']);
 $grouped  = $model->getLessonsGroupedByTopic($course['id']);
 $hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
@@ -67,6 +91,11 @@ siteHeader($course['title']);
   🔒 Este curso pertence a uma <strong>trilha bloqueada</strong>. Solicite ao administrador que libere seu acesso.
 </div>
 <?php endif; ?>
+<?php if (($_GET['notice'] ?? '') === 'unenrolled'): ?>
+<div class="alert-front alert-front-success" style="margin:1rem auto;max-width:860px">
+  ✅ Matrícula cancelada. Seu histórico neste curso foi removido.
+</div>
+<?php endif; ?>
 
 <div class="course-page">
   <!-- Header do curso -->
@@ -111,6 +140,12 @@ siteHeader($course['title']);
           <?php else: ?>
           <a href="watch.php?lesson=<?= $resumeId ?>" class="btn-hero">▶ Continuar assistindo</a>
           <?php endif; ?>
+          <form method="post" action="course.php?slug=<?= urlencode($slug) ?>" style="margin-top:.85rem"
+                onsubmit="return confirm('Cancelar sua matrícula neste curso?\n\nSeu progresso e certificado (se houver) serão apagados.')">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
+            <input type="hidden" name="_action" value="cancel_enrollment">
+            <button type="submit" class="btn-unenroll-course">❌ Cancelar matrícula</button>
+          </form>
         <?php endif; ?>
       <?php endif; ?>
     </div>

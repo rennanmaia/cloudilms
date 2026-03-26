@@ -3,6 +3,8 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/database.php';
 require_once __DIR__ . '/../includes/trail.php';
+require_once __DIR__ . '/../includes/course.php';
+require_once __DIR__ . '/../includes/activity_log.php';
 require_once __DIR__ . '/layout.php';
 
 $auth = new Auth();
@@ -10,6 +12,7 @@ $auth->requireAdmin();
 
 $db         = Database::getConnection();
 $trailModel = new TrailModel();
+$cModel     = new CourseModel();
 $message = $error = '';
 
 if (!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
@@ -80,6 +83,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $newStatus = $trailId ? $trailModel->toggleTrailStatus($id, $trailId) : null;
             header('Content-Type: application/json');
             echo json_encode(['ok' => (bool)$newStatus, 'status' => $newStatus]);
+            exit;
+        }
+
+        // ── Matrículas ───────────────────────────────────────────────────────
+        if ($action === 'enroll_course' && $id) {
+            $courseId = (int)($_POST['course_id'] ?? 0);
+            if ($courseId && !$cModel->isEnrolled($id, $courseId)) {
+                $cModel->enroll($id, $courseId);
+                $course = $cModel->getCourseById($courseId);
+                ActivityLog::record('course_enroll', [
+                    'user_id'      => $id,
+                    'entity_type'  => 'course',
+                    'entity_id'    => $courseId,
+                    'entity_title' => $course['title'] ?? '',
+                    'meta'         => ['enrolled_by_admin' => (int)$_SESSION['user_id']],
+                ]);
+            }
+            header('Location: users.php?action=edit&id=' . $id . '&msg=' . urlencode('Matrícula realizada.'));
+            exit;
+        }
+        if ($action === 'cancel_enrollment' && $id) {
+            $courseId = (int)($_POST['course_id'] ?? 0);
+            if ($courseId) {
+                $course = $cModel->getCourseById($courseId);
+                $cModel->cancelEnrollment($id, $courseId);
+                ActivityLog::record('course_unenroll', [
+                    'user_id'      => $id,
+                    'entity_type'  => 'course',
+                    'entity_id'    => $courseId,
+                    'entity_title' => $course['title'] ?? '',
+                    'meta'         => ['cancelled_by_admin' => (int)$_SESSION['user_id']],
+                ]);
+            }
+            header('Location: users.php?action=edit&id=' . $id . '&msg=' . urlencode('Matrícula cancelada e histórico removido.'));
             exit;
         }
     }
@@ -154,9 +191,78 @@ if ($action === 'new' || $action === 'edit') {
     </div>
 
     <?php if ($id):
-      $userTrails     = $trailModel->getUserTrails($id);
+      $userTrails      = $trailModel->getUserTrails($id);
       $availableTrails = $trailModel->getAvailableTrailsForUser($id);
+      $enrolledCourses = $cModel->getEnrolledCourses($id);
+      $allCourses      = $cModel->getAllCourses();
+      $enrolledIds     = array_column($enrolledCourses, 'id');
+      $availCourses    = array_filter($allCourses, fn($c) => !in_array($c['id'], $enrolledIds));
     ?>
+    <!-- Matrículas -->
+    <div class="card mt-2">
+      <div class="card-header">
+        <h2>📚 Matrículas (<?= count($enrolledCourses) ?>)</h2>
+      </div>
+      <?php if ($enrolledCourses): ?>
+      <table class="table">
+        <thead>
+          <tr><th>Curso</th><th>Progresso</th><th>Certificado</th><th>Matrícula em</th><th>Ações</th></tr>
+        </thead>
+        <tbody>
+          <?php foreach ($enrolledCourses as $ec):
+            $pct = $ec['lesson_count'] ? round($ec['completed_count'] / $ec['lesson_count'] * 100) : 0;
+          ?>
+          <tr>
+            <td><a href="<?= APP_URL ?>/course.php?slug=<?= urlencode($ec['slug']) ?>" target="_blank"><?= htmlspecialchars($ec['title']) ?></a></td>
+            <td>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;min-width:80px">
+                  <div style="height:6px;background:var(--success);border-radius:3px;width:<?= $pct ?>%"></div>
+                </div>
+                <span style="font-size:.8rem;color:var(--text3)"><?= $ec['completed_count'] ?>/<?= $ec['lesson_count'] ?> (<?= $pct ?>%)</span>
+              </div>
+            </td>
+            <td><?php if ($ec['cert_code']): ?>
+              <span class="badge badge-success">📜 Emitido</span>
+            <?php else: ?>
+              <span style="font-size:.8rem;color:var(--text3)">—</span>
+            <?php endif; ?></td>
+            <td style="font-size:.8rem;color:var(--text3)"><?= date('d/m/Y', strtotime($ec['enrolled_at'])) ?></td>
+            <td>
+              <form method="post" action="users.php?action=cancel_enrollment&id=<?= $id ?>" style="display:inline"
+                    onsubmit="return confirm('Cancelar matrícula em &quot;<?= htmlspecialchars(addslashes($ec['title'])) ?>&quot;?\n\nO histórico de aulas e certificado serão apagados.\nOs registros de auditoria serão mantidos.')">
+                <input type="hidden" name="csrf" value="<?= $csrf ?>">
+                <input type="hidden" name="course_id" value="<?= $ec['id'] ?>">
+                <button class="btn btn-sm btn-danger">✕ Cancelar</button>
+              </form>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php else: ?>
+      <div class="card-body" style="color:var(--text3)">Nenhuma matrícula registrada.</div>
+      <?php endif; ?>
+
+      <?php if ($availCourses): ?>
+      <div class="card-body" style="border-top:1px solid var(--bg3);padding-top:1rem">
+        <strong style="font-size:.9rem">Nova matrícula</strong>
+        <form method="post" action="users.php?action=enroll_course&id=<?= $id ?>" style="display:flex;gap:.75rem;align-items:flex-end;margin-top:.75rem;flex-wrap:wrap">
+          <input type="hidden" name="csrf" value="<?= $csrf ?>">
+          <div class="form-group" style="margin:0;flex:1;min-width:200px">
+            <label>Curso</label>
+            <select name="course_id" class="form-control topic-assign-select" required>
+              <option value="">— selecione —</option>
+              <?php foreach ($availCourses as $c): ?>
+              <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['title']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary">+ Matricular</button>
+        </form>
+      </div>
+      <?php endif; ?>
+    </div>
     <div class="card mt-2">
       <div class="card-header">
         <h2>🗺️ Trilhas do Usuário (<?= count($userTrails) ?>)</h2>

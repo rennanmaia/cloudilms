@@ -6,6 +6,7 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/course.php';
 require_once __DIR__ . '/includes/trail.php';
+require_once __DIR__ . '/includes/activity_log.php';
 require_once __DIR__ . '/includes/layout.php';
 
 $auth = new Auth();
@@ -14,13 +15,40 @@ $auth->requireLogin();
 $model      = new CourseModel();
 $trailModel = new TrailModel();
 $userId     = (int)$_SESSION['user_id'];
-$courses    = $model->getEnrolledCourses($userId);
-$trails     = $trailModel->getUserTrails($userId);
+
+// CSRF
+if (!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
+$csrf = $_SESSION['csrf_token'];
+
+// Cancelar matrícula (aluno)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['_action'] ?? '') === 'cancel_enrollment') {
+    if (($_POST['csrf'] ?? '') !== $csrf) { http_response_code(403); exit('Forbidden'); }
+    $courseId = (int)($_POST['course_id'] ?? 0);
+    if ($courseId && $model->isEnrolled($userId, $courseId)) {
+        $course = $model->getCourseById($courseId);
+        $model->cancelEnrollment($userId, $courseId);
+        ActivityLog::record('course_unenroll', [
+            'entity_type'  => 'course',
+            'entity_id'    => $courseId,
+            'entity_title' => $course['title'] ?? '',
+        ]);
+    }
+    header('Location: dashboard.php?msg=unenrolled');
+    exit;
+}
+
+$courses = $model->getEnrolledCourses($userId);
+$trails  = $trailModel->getUserTrails($userId);
+$msgOk   = ($_GET['msg'] ?? '') === 'unenrolled';
 
 siteHeader('Meus Cursos');
 ?>
 
 <h1 class="page-heading">Meus Cursos</h1>
+
+<?php if ($msgOk): ?>
+<div class="alert-front alert-front-success">✅ Matrícula cancelada. Seu histórico neste curso foi removido.</div>
+<?php endif; ?>
 
 <?php if ($trails): ?>
 <div class="dashboard-trails-bar">
@@ -38,7 +66,8 @@ siteHeader('Meus Cursos');
 <div class="course-grid">
   <?php foreach ($courses as $c): ?>
   <?php $pct = $c['lesson_count'] ? round($c['completed_count'] / $c['lesson_count'] * 100) : 0; ?>
-  <a href="course.php?slug=<?= urlencode($c['slug']) ?>" class="course-card">
+  <div class="course-card-wrap">
+    <a href="course.php?slug=<?= urlencode($c['slug']) ?>" class="course-card">
     <?php if ($c['thumbnail']): ?>
     <div class="course-thumb" style="background-image:url('<?= htmlspecialchars($c['thumbnail']) ?>')"></div>
     <?php else: ?>
@@ -52,10 +81,22 @@ siteHeader('Meus Cursos');
       </div>
       <div class="course-meta">
         <span>✅ <?= $c['completed_count'] ?>/<?= $c['lesson_count'] ?> aulas</span>
+        <?php if ($c['cert_code']): ?>
+        <span style="color:#c9a84c">📜 Certificado</span>
+        <?php else: ?>
         <span class="btn-enroll">Continuar →</span>
+        <?php endif; ?>
       </div>
     </div>
-  </a>
+    </a>
+    <form method="post" action="dashboard.php" class="course-unenroll-form"
+          onsubmit="return confirm('Cancelar matrícula em &quot;<?= htmlspecialchars(addslashes($c['title'])) ?>&quot;?\n\nSeu progresso e certificado (se houver) serão apagados.')">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="_action" value="cancel_enrollment">
+      <input type="hidden" name="course_id" value="<?= $c['id'] ?>">
+      <button type="submit" class="btn-unenroll" title="Cancelar matrícula">✕ Cancelar matrícula</button>
+    </form>
+  </div>
   <?php endforeach; ?>
 </div>
 <?php else: ?>
