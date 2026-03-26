@@ -416,6 +416,58 @@ a:hover { color: var(--primary2); }
 .chip-locked   { background: rgba(239,68,68,.1);  color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
 .dashboard-trails-more { font-size: .82rem; color: var(--primary); margin-left: auto; white-space: nowrap; }
 
+/* ── Index Trail Sections (catálogo agrupado) ──────────── */
+.index-trails {
+  display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 2rem;
+}
+.index-trail {
+  background: var(--bg2); border: 1px solid var(--bg3);
+  border-radius: var(--radius); overflow: hidden;
+}
+.index-trail--locked { border-color: rgba(239,68,68,.3); }
+.index-trail > summary { list-style: none; }
+.index-trail > summary::-webkit-details-marker { display: none; }
+.index-trail-summary {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .75rem; padding: 1rem 1.5rem;
+  cursor: pointer; user-select: none;
+  transition: background .15s;
+}
+.index-trail-summary:hover { background: rgba(255,255,255,.03); }
+.index-trail-left  { display: flex; align-items: center; gap: .75rem; flex: 1; min-width: 0; }
+.index-trail-icon  { font-size: 1.1rem; flex-shrink: 0; }
+.index-trail-name  { font-size: 1rem; font-weight: 700; }
+.index-trail-desc  { font-size: .8rem; color: var(--text2); margin-top: .15rem; }
+.index-trail-right { display: flex; align-items: center; gap: .65rem; flex-shrink: 0; }
+.index-trail-count { font-size: .8rem; color: var(--text3); white-space: nowrap; }
+.index-trail-chevron {
+  font-size: .65rem; color: var(--text3);
+  transition: transform .2s; display: inline-block;
+}
+details[open] > summary .index-trail-chevron { transform: rotate(180deg); }
+.index-trail-courses {
+  padding: .25rem 1.5rem 1.25rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.index-trail-empty {
+  padding: .5rem 1.5rem 1.25rem;
+  font-size: .875rem; color: var(--text3);
+}
+.trail-status-pill--neutral {
+  background: rgba(148,163,184,.1); color: var(--text2);
+  border: 1px solid rgba(148,163,184,.2);
+}
+
+/* ── Cursos Avulsos (standalone) ──────────────────────── */
+.index-standalone { margin-top: 2rem; }
+.index-standalone-header {
+  font-size: 1.1rem; font-weight: 700;
+  margin-bottom: 1rem; padding-bottom: .5rem;
+  border-bottom: 1px solid var(--bg3);
+}
+
 /* ── Trail cards (student view) ───────────────────────── */
 .trails-grid {
   display: flex; flex-direction: column; gap: 2rem;

@@ -188,6 +188,73 @@ class TrailModel {
         return in_array('unlocked', $statuses, true);
     }
 
+    /**
+     * Retorna TODAS as trilhas para a página inicial do catálogo.
+     * Cada trilha inclui somente cursos publicados e, para usuários logados,
+     * o status de atribuição (unlocked / locked / null).
+     * Ordem: unlocked primeiro, depois não-atribuído, depois locked.
+     */
+    public function getAllTrailsForIndex(?int $userId): array {
+        $stmt = $this->db->query(
+            'SELECT t.*,
+                    (SELECT COUNT(*)
+                     FROM trail_courses tc
+                     JOIN courses c ON c.id = tc.course_id
+                     WHERE tc.trail_id = t.id AND c.published = 1) AS published_course_count
+             FROM trails t
+             ORDER BY t.title ASC'
+        );
+        $trails = $stmt->fetchAll();
+
+        foreach ($trails as &$trail) {
+            $s = $this->db->prepare(
+                'SELECT c.*,
+                        tc.sort_order,
+                        (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) AS lesson_count
+                 FROM trail_courses tc
+                 JOIN courses c ON c.id = tc.course_id
+                 WHERE tc.trail_id = ? AND c.published = 1
+                 ORDER BY tc.sort_order ASC, c.title ASC'
+            );
+            $s->execute([$trail['id']]);
+            $trail['courses'] = $s->fetchAll();
+
+            if ($userId) {
+                $s = $this->db->prepare(
+                    'SELECT status FROM user_trails WHERE user_id = ? AND trail_id = ?'
+                );
+                $s->execute([$userId, $trail['id']]);
+                $trail['user_status'] = $s->fetchColumn() ?: null;
+            } else {
+                $trail['user_status'] = null;
+            }
+        }
+        unset($trail);
+
+        if ($userId) {
+            $scores = ['unlocked' => 0, 'locked' => 2];
+            usort($trails, function ($a, $b) use ($scores) {
+                $aScore = $scores[$a['user_status']] ?? 1;
+                $bScore = $scores[$b['user_status']] ?? 1;
+                return $aScore <=> $bScore;
+            });
+        }
+
+        return $trails;
+    }
+
+    /** Cursos publicados que não pertencem a nenhuma trilha (para o catálogo). */
+    public function getStandalonePublishedCourses(): array {
+        return $this->db->query(
+            'SELECT c.*,
+                    (SELECT COUNT(*) FROM lessons WHERE course_id = c.id) AS lesson_count
+             FROM courses c
+             WHERE c.published = 1
+               AND c.id NOT IN (SELECT course_id FROM trail_courses)
+             ORDER BY c.created_at DESC'
+        )->fetchAll();
+    }
+
     /** Trilhas do usuário com lista de cursos e progresso (para a página de trilhas do aluno) */
     public function getUserTrailsWithProgress(int $userId): array {
         $trails = $this->getUserTrails($userId);
