@@ -80,6 +80,13 @@ if ($logged) {
     ]);
 }
 
+// Carga horária do curso (vídeos + questionários + extra)
+$_videoMins   = (int) ceil(array_sum(array_column($lessons, 'duration_seconds')) / 60);
+$_allQuizzes  = $quizModel->getQuizzesByCourse($course['id']);
+$_quizMins    = (int) array_sum(array_column($_allQuizzes, 'workload_minutes'));
+$_extraMins   = (int) ($course['extra_hours_minutes'] ?? 0);
+$workloadMins = $_videoMins + $_quizMins + $_extraMins;
+
 siteHeader($course['title']);
 ?>
 
@@ -117,6 +124,9 @@ siteHeader($course['title']);
       <?php endif; ?>
       <div class="course-hero-meta">
         <span>📹 <?= count($lessons) ?> aulas</span>
+        <?php if ($workloadMins > 0): ?>
+        <span>⏱ <?= CertificateModel::formatWorkload($workloadMins) ?></span>
+        <?php endif; ?>
         <?php if ($enrolled): ?>
           <?php $pct = $lessons ? round(count($progress) / count($lessons) * 100) : 0; ?>
           <span>✅ <?= $pct ?>% concluído</span>

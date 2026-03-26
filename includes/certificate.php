@@ -68,8 +68,15 @@ class CertificateModel {
         );
         $stmt->execute([$courseId]);
         $videoMins = (int) ceil((int) $stmt->fetchColumn() / 60);
+
+        $stmt = $this->db->prepare(
+            'SELECT COALESCE(SUM(workload_minutes), 0) FROM quizzes WHERE course_id = ?'
+        );
+        $stmt->execute([$courseId]);
+        $quizMins  = (int) $stmt->fetchColumn();
+
         $extraMins = (int) ($course['extra_hours_minutes'] ?? 0);
-        $total     = $videoMins + $extraMins;
+        $total     = $videoMins + $quizMins + $extraMins;
         // Arredonda para cima até a hora cheia mais próxima
         return (int) ceil($total / 60) * 60;
     }
