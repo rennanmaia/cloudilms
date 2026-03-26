@@ -64,9 +64,9 @@ class QuizModel {
     public function createQuiz(array $data): int {
         $stmt = $this->db->prepare(
             'INSERT INTO quizzes
-             (course_id, title, description, placement_type, placement_id,
+             (course_id, title, description, placement_type, placement_id, block_next,
               scoring_method, min_score, workload_minutes, sort_order, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())'
         );
         $stmt->execute([
             (int)   $data['course_id'],
@@ -74,6 +74,7 @@ class QuizModel {
                     trim($data['description'] ?? '') ?: null,
                     $data['placement_type'],
                     $data['placement_id'] ? (int)$data['placement_id'] : null,
+            (int)   ($data['block_next'] ?? 0),
                     $data['scoring_method'],
             (float) $data['min_score'],
             (int)   ($data['workload_minutes'] ?? 0),
@@ -85,7 +86,7 @@ class QuizModel {
     public function updateQuiz(int $id, array $data): void {
         $this->db->prepare(
             'UPDATE quizzes
-             SET title=?, description=?, placement_type=?, placement_id=?,
+             SET title=?, description=?, placement_type=?, placement_id=?, block_next=?,
                  scoring_method=?, min_score=?, workload_minutes=?
              WHERE id=?'
         )->execute([
@@ -93,6 +94,7 @@ class QuizModel {
                     trim($data['description'] ?? '') ?: null,
                     $data['placement_type'],
                     $data['placement_id'] ? (int)$data['placement_id'] : null,
+            (int)   ($data['block_next'] ?? 0),
                     $data['scoring_method'],
             (float) $data['min_score'],
             (int)   ($data['workload_minutes'] ?? 0),

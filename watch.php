@@ -41,13 +41,66 @@ $forceSequential = !empty($lesson['force_sequential']);
 $preventSeek     = !empty($lesson['prevent_seek']);
 $requireWatch    = !empty($lesson['require_watch']);   // 1 = exige 75%; 0 = conclusão manual livre
 
+// Carrega questionários (sidebar + cálculo de bloqueios)
+$_qModel         = new QuizModel();
+$_allQuizzes     = $_qModel->getQuizzesByCourse($course['id']);
+$quizzesByLesson = [];
+$quizzesByTopic  = [];
+$quizEndOfCourse = [];
+foreach ($_allQuizzes as $_q) {
+    if ($_q['placement_type'] === 'after_lesson' && $_q['placement_id']) {
+        $quizzesByLesson[(int)$_q['placement_id']][] = $_q;
+    } elseif ($_q['placement_type'] === 'after_topic' && $_q['placement_id']) {
+        $quizzesByTopic[(int)$_q['placement_id']][] = $_q;
+    } else {
+        $quizEndOfCourse[] = $_q;
+    }
+}
+$quizBestAttempts = [];
+foreach ($_allQuizzes as $_q) {
+    $quizBestAttempts[$_q['id']] = $_qModel->getBestAttempt((int)$_q['id'], $userId);
+}
+
 // Pre-calcula quais aulas estão bloqueadas:
-// Aula N está bloqueada se ela tem force_sequential=1 e a aula N-1 não foi concluída.
+// (a) force_sequential e a aula anterior não foi concluída
+// (b) questionário block_next=1 após a aula anterior não foi aprovado
+// (c) questionário block_next=1 do tópico anterior não foi aprovado (fronteira de tópico)
 $lessonIds = array_column($lessons, 'id');
 $lockedIds = [];
 foreach ($lessons as $i => $l) {
-    if (!empty($l['force_sequential']) && $i > 0 && !in_array($lessons[$i - 1]['id'], $progress)) {
+    if ($i === 0) continue;
+    $prev = $lessons[$i - 1];
+
+    // (a) force_sequential
+    if (!empty($l['force_sequential']) && !in_array($prev['id'], $progress)) {
         $lockedIds[$l['id']] = true;
+        continue;
+    }
+
+    // (b) blocking quiz after previous lesson
+    foreach (($quizzesByLesson[(int)$prev['id']] ?? []) as $_bq) {
+        if (!empty($_bq['block_next'])) {
+            $_ba = $quizBestAttempts[$_bq['id']] ?? null;
+            if (!$_ba || !(int)($_ba['passed'] ?? 0)) {
+                $lockedIds[$l['id']] = true;
+                continue 2;
+            }
+        }
+    }
+
+    // (c) blocking quiz at topic boundary
+    $prevTopicId = (int)($prev['topic_id'] ?? 0);
+    $currTopicId = (int)($l['topic_id'] ?? 0);
+    if ($prevTopicId !== $currTopicId && $prevTopicId && isset($quizzesByTopic[$prevTopicId])) {
+        foreach ($quizzesByTopic[$prevTopicId] as $_bq) {
+            if (!empty($_bq['block_next'])) {
+                $_ba = $quizBestAttempts[$_bq['id']] ?? null;
+                if (!$_ba || !(int)($_ba['passed'] ?? 0)) {
+                    $lockedIds[$l['id']] = true;
+                    continue 2;
+                }
+            }
+        }
     }
 }
 
@@ -148,26 +201,6 @@ $nextLesson   = $currentIndex < count($lessons) - 1 ? $lessons[$currentIndex + 1
 $embedUrl = GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']);
 $pct = count($lessons) ? round(count($progress) / count($lessons) * 100) : 0;
 
-// Carrega questionários para exibição na sidebar
-$_qModel          = new QuizModel();
-$_allQuizzes      = $_qModel->getQuizzesByCourse($course['id']);
-$quizzesByLesson  = [];
-$quizzesByTopic   = [];
-$quizEndOfCourse  = [];
-foreach ($_allQuizzes as $_q) {
-    if ($_q['placement_type'] === 'after_lesson' && $_q['placement_id']) {
-        $quizzesByLesson[(int)$_q['placement_id']][] = $_q;
-    } elseif ($_q['placement_type'] === 'after_topic' && $_q['placement_id']) {
-        $quizzesByTopic[(int)$_q['placement_id']][] = $_q;
-    } else {
-        $quizEndOfCourse[] = $_q;
-    }
-}
-$quizBestAttempts = [];
-foreach ($_allQuizzes as $_q) {
-    $quizBestAttempts[$_q['id']] = $_qModel->getBestAttempt((int)$_q['id'], $userId);
-}
-
 siteHeader($lesson['title'] . ' - ' . $course['title']);
 ?>
 
@@ -217,7 +250,8 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
               <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
                 <span class="wl-index wl-quiz-icon">📝</span>
                 <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
-                <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+                <?php if ($_qP): ?><span class="wl-check">✓</span>
+                <?php elseif (!empty($_qv['block_next'])): ?><span class="wl-lock" title="Aprovação obrigatória para prosseguir">🔒</span><?php endif; ?>
               </a>
             </li>
             <?php endforeach; ?>
@@ -230,7 +264,8 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
               <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
                 <span class="wl-index wl-quiz-icon">📝</span>
                 <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
-                <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+                <?php if ($_qP): ?><span class="wl-check">✓</span>
+                <?php elseif (!empty($_qv['block_next'])): ?><span class="wl-lock" title="Aprovação obrigatória para prosseguir">🔒</span><?php endif; ?>
               </a>
             </li>
             <?php endforeach; ?>
@@ -261,7 +296,8 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
             <a href="<?= APP_URL ?>/quiz.php?quiz_id=<?= $_qv['id'] ?>&amp;course_slug=<?= urlencode($course['slug']) ?>">
               <span class="wl-index wl-quiz-icon">📝</span>
               <span class="wl-title"><?= htmlspecialchars($_qv['title']) ?></span>
-              <?php if ($_qP): ?><span class="wl-check">✓</span><?php endif; ?>
+              <?php if ($_qP): ?><span class="wl-check">✓</span>
+              <?php elseif (!empty($_qv['block_next'])): ?><span class="wl-lock" title="Aprovação obrigatória para prosseguir">🔒</span><?php endif; ?>
             </a>
           </li>
           <?php endforeach; ?>

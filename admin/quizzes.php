@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'description'       => trim($_POST['description'] ?? ''),
                     'placement_type'    => $_POST['placement_type'] ?? 'end_of_course',
                     'placement_id'      => null, // resolvido abaixo conforme placement_type
+                    'block_next'        => !empty($_POST['block_next']) ? 1 : 0,
                     'scoring_method'    => $_POST['scoring_method'] ?? 'arithmetic',
                     'min_score'         => min(100, max(0, (float)($_POST['min_score'] ?? 60))),
                     'workload_minutes'  => max(0, (int)($_POST['workload_minutes'] ?? 0)),
@@ -261,6 +262,7 @@ if ($action === 'edit') {
     $fPlIdLesson = (int)($_POST['placement_id_lesson'] ?? ($fPlType === 'after_lesson' ? ($quiz['placement_id'] ?? 0) : 0));
     $fPlIdTopic  = (int)($_POST['placement_id_topic']  ?? ($fPlType === 'after_topic'  ? ($quiz['placement_id'] ?? 0) : 0));
     $fScoring    = $_POST['scoring_method'] ?? ($quiz['scoring_method'] ?? 'arithmetic');
+    $fBlockNext  = (int)($_POST['block_next'] ?? ($quiz['block_next'] ?? 0));
     $fMinScore = $_POST['min_score']      ?? ($quiz['min_score']      ?? '60');
     $fWorkload = $_POST['workload_minutes'] ?? ($quiz['workload_minutes'] ?? '0');
 
@@ -341,6 +343,15 @@ if ($action === 'edit') {
             </select>
           </div>
 
+          <!-- Bloquear prosseguimento -->
+          <div class="form-group" id="block-next-wrap" <?= $fPlType === 'end_of_course' ? 'style="display:none"' : '' ?>>
+            <label style="display:flex;align-items:center;gap:.6rem;cursor:pointer">
+              <input type="checkbox" name="block_next" value="1" <?= $fBlockNext ? 'checked' : '' ?> id="chkBlockNext">
+              <span>🔒 <strong>Bloquear próxima aula</strong> até que o aluno seja aprovado neste questionário</span>
+            </label>
+            <small style="color:#94a3b8;margin-top:.25rem;display:block">Funciona como a opção "Forçar sequência" das aulas</small>
+          </div>
+
           <!-- Pontuação -->
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
             <div class="form-group">
@@ -385,6 +396,7 @@ if ($action === 'edit') {
         radio.closest('.quiz-placement-opt').classList.add('active');
         document.getElementById('placement-lesson-wrap').style.display = radio.value === 'after_lesson' ? '' : 'none';
         document.getElementById('placement-topic-wrap').style.display  = radio.value === 'after_topic'  ? '' : 'none';
+        document.getElementById('block-next-wrap').style.display       = radio.value === 'end_of_course' ? 'none' : '';
     }
     </script>
     <?php
