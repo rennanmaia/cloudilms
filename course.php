@@ -85,7 +85,8 @@ $_videoMins   = (int) ceil(array_sum(array_column($lessons, 'duration_seconds'))
 $_allQuizzes  = $quizModel->getQuizzesByCourse($course['id']);
 $_quizMins    = (int) array_sum(array_column($_allQuizzes, 'workload_minutes'));
 $_extraMins   = (int) ($course['extra_hours_minutes'] ?? 0);
-$workloadMins = $_videoMins + $_quizMins + $_extraMins;
+$_rawMins     = $_videoMins + $_quizMins + $_extraMins;
+$workloadMins = $_rawMins > 0 ? (int) (ceil($_rawMins / 60) * 60) : 0;
 
 siteHeader($course['title']);
 ?>
