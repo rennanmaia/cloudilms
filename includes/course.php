@@ -366,17 +366,59 @@ class CourseModel {
 
     // ── Matrículas ──────────────────────────────────────────────────────────
 
+    /**
+     * Retorna true apenas se o aluno possui matrícula ATIVA (não expirada).
+     * Usar em páginas de aluno para controle de acesso.
+     */
     public function isEnrolled(int $userId, int $courseId): bool {
-        $stmt = $this->db->prepare('SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ?');
+        $stmt = $this->db->prepare(
+            'SELECT 1 FROM enrollments
+             WHERE user_id = ? AND course_id = ?
+               AND (expires_at IS NULL OR expires_at > NOW())'
+        );
         $stmt->execute([$userId, $courseId]);
         return (bool)$stmt->fetch();
     }
 
-    public function enroll(int $userId, int $courseId): void {
+    /**
+     * Retorna a linha de matrícula (incluindo expiradas) ou false se não existe.
+     */
+    public function getEnrollment(int $userId, int $courseId): array|false {
         $stmt = $this->db->prepare(
-            'INSERT IGNORE INTO enrollments (user_id, course_id, enrolled_at) VALUES (?, ?, NOW())'
+            'SELECT * FROM enrollments WHERE user_id = ? AND course_id = ?'
         );
         $stmt->execute([$userId, $courseId]);
+        return $stmt->fetch();
+    }
+
+    /**
+     * Retorna true se existe qualquer matrícula (ativa ou expirada).
+     * Usar no admin ao evitar duplicate-enroll.
+     */
+    public function hasEnrollment(int $userId, int $courseId): bool {
+        $stmt = $this->db->prepare(
+            'SELECT 1 FROM enrollments WHERE user_id = ? AND course_id = ?'
+        );
+        $stmt->execute([$userId, $courseId]);
+        return (bool)$stmt->fetch();
+    }
+
+    /**
+     * Define o prazo de validade da matrícula.
+     * Passa null para remover o prazo (sem expiração).
+     */
+    public function setExpiresAt(int $userId, int $courseId, ?string $expiresAt): void {
+        $this->db->prepare(
+            'UPDATE enrollments SET expires_at = ? WHERE user_id = ? AND course_id = ?'
+        )->execute([$expiresAt, $userId, $courseId]);
+    }
+
+    public function enroll(int $userId, int $courseId, ?string $expiresAt = null): void {
+        $stmt = $this->db->prepare(
+            'INSERT IGNORE INTO enrollments (user_id, course_id, enrolled_at, expires_at)
+             VALUES (?, ?, NOW(), ?)'
+        );
+        $stmt->execute([$userId, $courseId, $expiresAt]);
     }
 
     /**
@@ -394,7 +436,8 @@ class CourseModel {
 
     public function getEnrolledCourses(int $userId): array {
         $stmt = $this->db->prepare(
-            'SELECT c.*, e.enrolled_at,
+            'SELECT c.*, e.enrolled_at, e.expires_at,
+                    (e.expires_at IS NOT NULL AND e.expires_at <= NOW()) AS is_expired,
                     (SELECT COUNT(*) FROM lessons l WHERE l.course_id = c.id) AS lesson_count,
                     (SELECT COUNT(*) FROM progress p WHERE p.user_id = ? AND p.course_id = c.id AND p.completed = 1) AS completed_count,
                     (SELECT cert_code FROM certificates WHERE user_id = ? AND course_id = c.id LIMIT 1) AS cert_code

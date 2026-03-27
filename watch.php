@@ -27,7 +27,13 @@ if (!$course || !$course['published']) { header('Location: ' . APP_URL . '/index
 $userId   = (int)$_SESSION['user_id'];
 $enrolled = $model->isEnrolled($userId, $course['id']);
 if (!$enrolled) {
-    header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($course['slug']));
+    // Check if there's an expired enrollment
+    $enrollment = $model->getEnrollment($userId, $course['id']);
+    if ($enrollment && $enrollment['expires_at'] && strtotime($enrollment['expires_at']) <= time()) {
+        header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($course['slug']) . '&notice=expired');
+    } else {
+        header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($course['slug']));
+    }
     exit;
 }
 

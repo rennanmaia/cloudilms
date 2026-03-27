@@ -39,7 +39,13 @@ if (!$quiz) {
 $courseId = (int)$quiz['course_id'];
 $course   = $courseModel->getCourseById($courseId);
 if (!$course || !$courseModel->isEnrolled($userId, $courseId)) {
-    header('Location: ' . APP_URL . '/index.php');
+    // Check if expired enrollment
+    $enrollment = $course ? $courseModel->getEnrollment($userId, $courseId) : null;
+    if ($enrollment && $enrollment['expires_at'] && strtotime($enrollment['expires_at']) <= time()) {
+        header('Location: ' . APP_URL . '/course.php?slug=' . urlencode($course['slug']) . '&notice=expired');
+    } else {
+        header('Location: ' . APP_URL . '/index.php');
+    }
     exit;
 }
 

@@ -52,11 +52,18 @@ $hasTopics = count($grouped) > 1 || ($grouped[0]['topic'] !== null);
 $logged   = $auth->isLoggedIn();
 $userId   = $logged ? (int)$_SESSION['user_id'] : 0;
 $enrolled = $logged && $model->isEnrolled($userId, $course['id']);
+// Detect expired enrollment (has row but expires_at is in the past)
+$enrollmentRow  = ($logged && !$enrolled) ? $model->getEnrollment($userId, $course['id']) : null;
+$enrollExpired  = $enrollmentRow && $enrollmentRow['expires_at'] && strtotime($enrollmentRow['expires_at']) <= time();
 $progress = $enrolled ? $model->getProgress($userId, $course['id']) : [];
-$enrollBlocked = $logged && !$enrolled && !$trailModel->canEnrollInCourse($userId, $course['id']);
+$enrollBlocked = $logged && !$enrolled && !$enrollExpired && !$trailModel->canEnrollInCourse($userId, $course['id']);
 
-// Matrícula automática ao clicar em "começar"
+// Block auto-enroll for users with expired enrollment
 if ($logged && isset($_GET['enroll'])) {
+    if ($enrollExpired) {
+        header('Location: course.php?slug=' . urlencode($slug) . '&notice=expired');
+        exit;
+    }
     if ($enrollBlocked) {
         header('Location: course.php?slug=' . urlencode($slug) . '&notice=trail_locked');
         exit;
@@ -111,6 +118,11 @@ siteHeader($course['title']);
   📝 Você precisa ser aprovado em todos os <strong>questionários do curso</strong> para emitir o certificado.
 </div>
 <?php endif; ?>
+<?php if (($_GET['notice'] ?? '') === 'expired'): ?>
+<div class="alert alert-danger" style="margin:1rem auto;max-width:860px">
+  ⏰ Sua <strong>matrícula expirou</strong>. Você não pode mais acessar este curso. Solicite ao administrador que reative sua matrícula.
+</div>
+<?php endif; ?>
 
 <div class="course-page">
   <!-- Header do curso -->
@@ -135,6 +147,11 @@ siteHeader($course['title']);
       </div>
       <?php if (!$logged): ?>
         <a href="login.php?redirect=<?= urlencode('course.php?slug=' . $slug . '&enroll=1') ?>" class="btn-hero">🔐 Entrar para assistir</a>
+      <?php elseif ($enrollExpired): ?>
+        <div class="enrollment-expired-notice">
+          ⏰ <strong>Sua matrícula expirou</strong> em <?= date('d/m/Y', strtotime($enrollmentRow['expires_at'])) ?>.<br>
+          Solicite ao administrador que reative seu acesso a este curso.
+        </div>
       <?php elseif (!$enrolled && $enrollBlocked): ?>
         <div class="trail-blocked-notice">
           🔒 Este curso pertence a uma trilha que não está liberada para você.<br>

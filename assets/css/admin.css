@@ -532,6 +532,23 @@ hr { border: none; border-top: 1px solid var(--bg3); }
   font-size: .775rem; color: var(--text3); white-space: nowrap;
 }
 
+/* Expiry cell */
+.enroll-expiry-cell { min-width: 160px; }
+.enroll-expired-badge {
+  font-size: .75rem !important; font-weight: 700 !important;
+  display: inline-block; vertical-align: middle;
+}
+.enroll-expiry-badge {
+  font-size: .75rem !important; display: inline-block; vertical-align: middle;
+}
+.enroll-expiry-form { margin-top: .25rem; }
+.badge-warning {
+  background: rgba(251,191,36,.18); color: #fbbf24;
+  border: 1px solid rgba(251,191,36,.35);
+  font-size: .75rem; padding: .15rem .45rem; border-radius: .25rem;
+  display: inline-block;
+}
+
 /* ── Rich Text Editor (edição de aulas) ─────────────────────────────────── */
 .rte-wrapper {
   border: 1px solid var(--bg3);

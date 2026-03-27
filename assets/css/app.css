@@ -779,6 +779,51 @@ details[open] > summary .index-trail-chevron { transform: rotate(180deg); }
   display: inline-block;
 }
 
+/* ── Enrollment expired notices ─────────────────────────────────────────── */
+.enrollment-expired-notice {
+  background: rgba(239,68,68,.1); border: 1px solid rgba(239,68,68,.35);
+  border-left: 4px solid #ef4444;
+  border-radius: .5rem; padding: 1rem 1.25rem;
+  color: #fca5a5; font-size: .9rem; margin-top: .75rem;
+  display: inline-block; line-height: 1.6;
+}
+
+/* Dashboard card: expired state */
+.course-card-expired .course-card { opacity: .65; pointer-events: none; filter: grayscale(.4); }
+.course-card-expired .course-thumb::after {
+  content: ''; position: absolute; inset: 0;
+  background: rgba(0,0,0,.35);
+}
+.course-card-expired .course-thumb { position: relative; }
+.course-expired-badge {
+  font-size: .75rem; font-weight: 700; color: #fca5a5;
+  background: rgba(239,68,68,.15); border: 1px solid rgba(239,68,68,.3);
+  border-radius: .25rem; padding: .15rem .5rem; display: inline-block;
+  margin-bottom: .4rem;
+}
+.course-expiry-warning {
+  font-size: .75rem; color: #fbbf24;
+  background: rgba(251,191,36,.1); border: 1px solid rgba(251,191,36,.3);
+  border-radius: .25rem; padding: .15rem .5rem; display: inline-block;
+  margin-bottom: .4rem;
+}
+.course-expiry-info {
+  font-size: .75rem; color: #93c5fd;
+  background: rgba(59,130,246,.08); border: 1px solid rgba(59,130,246,.2);
+  border-radius: .25rem; padding: .15rem .5rem; display: inline-block;
+  margin-bottom: .4rem;
+}
+.badge-expired-small {
+  font-size: .72rem; color: #fca5a5;
+  background: rgba(239,68,68,.12); border-radius: .2rem;
+  padding: .1rem .4rem; border: 1px solid rgba(239,68,68,.25);
+}
+.course-expired-notice {
+  font-size: .75rem; color: #94a3b8;
+  padding: .4rem .75rem .6rem;
+  text-align: center; line-height: 1.4;
+}
+
 /* ── Quiz items na sidebar de aulas (watch.php) ─────────────────────────── */
 .watch-quiz-item {
   background: rgba(59,130,246,.05);

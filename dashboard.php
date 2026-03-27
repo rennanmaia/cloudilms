@@ -65,8 +65,13 @@ siteHeader('Meus Cursos');
 <?php if ($courses): ?>
 <div class="course-grid">
   <?php foreach ($courses as $c): ?>
-  <?php $pct = $c['lesson_count'] ? round($c['completed_count'] / $c['lesson_count'] * 100) : 0; ?>
-  <div class="course-card-wrap">
+  <?php
+    $pct        = $c['lesson_count'] ? round($c['completed_count'] / $c['lesson_count'] * 100) : 0;
+    $isExpired  = !empty($c['is_expired']);
+    $expiresAt  = $c['expires_at'] ?? null;
+    $daysLeft   = ($expiresAt && !$isExpired) ? (int)ceil((strtotime($expiresAt) - time()) / 86400) : null;
+  ?>
+  <div class="course-card-wrap <?= $isExpired ? 'course-card-expired' : '' ?>">
     <a href="course.php?slug=<?= urlencode($c['slug']) ?>" class="course-card">
     <?php if ($c['thumbnail']): ?>
     <div class="course-thumb" style="background-image:url('<?= htmlspecialchars($c['thumbnail']) ?>')"></div>
@@ -75,13 +80,22 @@ siteHeader('Meus Cursos');
     <?php endif; ?>
     <div class="course-card-body">
       <h3 class="course-title"><?= htmlspecialchars($c['title']) ?></h3>
+      <?php if ($isExpired): ?>
+      <div class="course-expired-badge">⏰ Matrícula expirada</div>
+      <?php elseif ($daysLeft !== null && $daysLeft <= 7): ?>
+      <div class="course-expiry-warning">⚠️ Expira em <?= $daysLeft ?> dia(s)</div>
+      <?php elseif ($expiresAt): ?>
+      <div class="course-expiry-info">📅 Prazo: <?= date('d/m/Y', strtotime($expiresAt)) ?></div>
+      <?php endif; ?>
       <div class="progress-mini-wrap">
         <div class="progress-mini-track"><div class="progress-mini-fill" style="width:<?= $pct ?>%"></div></div>
         <span><?= $pct ?>%</span>
       </div>
       <div class="course-meta">
         <span>✅ <?= $c['completed_count'] ?>/<?= $c['lesson_count'] ?> aulas</span>
-        <?php if ($c['cert_code']): ?>
+        <?php if ($isExpired): ?>
+        <span class="badge-expired-small">Expirado</span>
+        <?php elseif ($c['cert_code']): ?>
         <span style="color:#c9a84c">📜 Certificado</span>
         <?php else: ?>
         <span class="btn-enroll">Continuar →</span>
@@ -89,6 +103,7 @@ siteHeader('Meus Cursos');
       </div>
     </div>
     </a>
+    <?php if (!$isExpired): ?>
     <form method="post" action="dashboard.php" class="course-unenroll-form"
           onsubmit="return confirm('Cancelar matrícula em &quot;<?= htmlspecialchars(addslashes($c['title'])) ?>&quot;?\n\nSeu progresso e certificado (se houver) serão apagados.')">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -96,6 +111,9 @@ siteHeader('Meus Cursos');
       <input type="hidden" name="course_id" value="<?= $c['id'] ?>">
       <button type="submit" class="btn-unenroll" title="Cancelar matrícula">✕ Cancelar matrícula</button>
     </form>
+    <?php else: ?>
+    <div class="course-expired-notice">Solicite ao administrador para reativar este acesso.</div>
+    <?php endif; ?>
   </div>
   <?php endforeach; ?>
 </div>
