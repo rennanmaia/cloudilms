@@ -9,6 +9,10 @@ $auth = new Auth();
 if ($auth->isLoggedIn()) { header('Location: ' . APP_URL . '/index.php'); exit; }
 
 $error = '';
+$success = '';
+if ($_GET['msg'] ?? '' === 'password_reset') {
+    $success = 'Senha redefinida com sucesso! Faça login com a nova senha.';
+}
 if (!isset($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(16));
 $csrf = $_SESSION['csrf_token'];
 
@@ -42,6 +46,7 @@ siteHeader('Entrar');
 <div class="auth-wrap">
   <div class="auth-box">
     <h1 class="auth-title">☁️ Entrar</h1>
+    <?php if ($success): ?><div class="alert alert-success"><?= htmlspecialchars($success) ?></div><?php endif; ?>
     <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <form method="post">
       <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -55,6 +60,7 @@ siteHeader('Entrar');
       </div>
       <button type="submit" class="btn btn-primary w-full">Entrar</button>
     </form>
+    <p class="auth-link"><a href="forgot-password.php">Esqueceu a senha?</a></p>
     <p class="auth-link">Não tem conta? <a href="register.php">Cadastre-se</a></p>
   </div>
 </div>
