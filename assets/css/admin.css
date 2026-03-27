@@ -497,3 +497,59 @@ hr { border: none; border-top: 1px solid var(--bg3); }
 .enroll-progress-label {
   font-size: .775rem; color: var(--text3); white-space: nowrap;
 }
+
+/* ── Rich Text Editor (edição de aulas) ─────────────────────────────────── */
+.rte-wrapper {
+  border: 1px solid var(--bg3);
+  border-radius: .5rem;
+  overflow: hidden;
+}
+.rte-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .15rem;
+  padding: .4rem .5rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--bg3);
+  align-items: center;
+}
+.rte-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text2);
+  padding: .2rem .5rem;
+  border-radius: .3rem;
+  cursor: pointer;
+  font-size: .82rem;
+  line-height: 1.5;
+  transition: background .12s, color .12s;
+  font-family: inherit;
+}
+.rte-btn:hover { background: var(--bg3); color: var(--text1); }
+.rte-btn.rte-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.rte-sep {
+  width: 1px; height: 20px;
+  background: var(--bg3);
+  margin: 0 .2rem;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.rte-content {
+  min-height: 220px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding: .85rem 1rem;
+  background: #1e293b;
+  color: #e2e8f0;
+  outline: none;
+  font-size: .9rem;
+  line-height: 1.75;
+}
+.rte-content:focus { background: #1e2d43; }
+.rte-content h2 { font-size: 1.2rem; margin: .75rem 0 .25rem; color: #f1f5f9; }
+.rte-content h3 { font-size: 1rem; margin: .6rem 0 .2rem; color: #f1f5f9; }
+.rte-content a   { color: #60a5fa; }
+.rte-content ul, .rte-content ol { padding-left: 1.4rem; margin: .4rem 0; }
+.rte-content blockquote { border-left: 3px solid #475569; padding-left: .75rem; color: #94a3b8; margin: .5rem 0; }
+.rte-content code { background: rgba(0,0,0,.35); padding: .1em .3em; border-radius: 3px; font-size: .85em; }
+.rte-content p { margin: .4rem 0; }

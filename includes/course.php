@@ -265,7 +265,103 @@ class CourseModel {
     }
 
     public function deleteLesson(int $id): void {
+        // Remove arquivos de disco antes do CASCADE apagar os registros
+        $atts = $this->getAttachmentsByLesson($id);
+        foreach ($atts as $att) {
+            if (!empty($att['file_path'])) {
+                $filePath = __DIR__ . '/../uploads/attachments/' . basename($att['file_path']);
+                if (file_exists($filePath) && is_file($filePath)) @unlink($filePath);
+            }
+        }
         $this->db->prepare('DELETE FROM lessons WHERE id = ?')->execute([$id]);
+    }
+
+    /**
+     * Cria uma aula avulsa (não sincronizada pelo Drive).
+     * @param ?string $gdriveFileId  ID do vídeo no Drive, ou null se não há vídeo.
+     */
+    public function createManualLesson(int $courseId, ?int $topicId, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $bodyText): int {
+        if ($topicId !== null) {
+            $stmtMax = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lessons WHERE course_id = ? AND topic_id = ?');
+            $stmtMax->execute([$courseId, $topicId]);
+        } else {
+            $stmtMax = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lessons WHERE course_id = ? AND topic_id IS NULL');
+            $stmtMax->execute([$courseId]);
+        }
+        $maxOrder = (int)$stmtMax->fetchColumn();
+
+        $this->db->prepare(
+            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, mime_type, sort_order, body_text, created_at)
+             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :mime_type, :sort_order, :body_text, NOW())'
+        )->execute([
+            ':course_id'      => $courseId,
+            ':topic_id'       => $topicId,
+            ':title'          => $title,
+            ':gdrive_file_id' => $gdriveFileId ?: null,
+            ':mime_type'      => $mimeType ?: null,
+            ':sort_order'     => $maxOrder + 1,
+            ':body_text'      => $bodyText ?: null,
+        ]);
+        return (int)$this->db->lastInsertId();
+    }
+
+    /**
+     * Atualiza os campos editáveis de uma aula (avulsa ou sincronizada).
+     */
+    public function updateLesson(int $id, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $bodyText): void {
+        $this->db->prepare(
+            'UPDATE lessons SET title = :title, gdrive_file_id = :gdrive_file_id, mime_type = :mime_type, body_text = :body_text WHERE id = :id'
+        )->execute([
+            ':title'          => $title,
+            ':gdrive_file_id' => $gdriveFileId ?: null,
+            ':mime_type'      => $mimeType ?: null,
+            ':body_text'      => $bodyText ?: null,
+            ':id'             => $id,
+        ]);
+    }
+
+    // ── Anexos de aulas ─────────────────────────────────────────────────────
+
+    public function getAttachmentsByLesson(int $lessonId): array {
+        $stmt = $this->db->prepare(
+            'SELECT * FROM lesson_attachments WHERE lesson_id = ? ORDER BY sort_order ASC, id ASC'
+        );
+        $stmt->execute([$lessonId]);
+        return $stmt->fetchAll();
+    }
+
+    public function getAttachmentById(int $id): ?array {
+        $stmt = $this->db->prepare('SELECT * FROM lesson_attachments WHERE id = ?');
+        $stmt->execute([$id]);
+        return $stmt->fetch() ?: null;
+    }
+
+    public function addAttachment(int $lessonId, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $filePath = null): int {
+        $stmt = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lesson_attachments WHERE lesson_id = ?');
+        $stmt->execute([$lessonId]);
+        $maxOrder = (int)$stmt->fetchColumn();
+
+        $this->db->prepare(
+            'INSERT INTO lesson_attachments (lesson_id, title, gdrive_file_id, mime_type, file_path, sort_order, created_at)
+             VALUES (:lesson_id, :title, :gdrive_file_id, :mime_type, :file_path, :sort_order, NOW())'
+        )->execute([
+            ':lesson_id'      => $lessonId,
+            ':title'          => $title,
+            ':gdrive_file_id' => $gdriveFileId ?: null,
+            ':mime_type'      => $mimeType ?: null,
+            ':file_path'      => $filePath ?: null,
+            ':sort_order'     => $maxOrder + 1,
+        ]);
+        return (int)$this->db->lastInsertId();
+    }
+
+    public function deleteAttachment(int $attachmentId): void {
+        $att = $this->getAttachmentById($attachmentId);
+        if ($att && !empty($att['file_path'])) {
+            $filePath = __DIR__ . '/../uploads/attachments/' . basename($att['file_path']);
+            if (file_exists($filePath) && is_file($filePath)) @unlink($filePath);
+        }
+        $this->db->prepare('DELETE FROM lesson_attachments WHERE id = ?')->execute([$attachmentId]);
     }
 
     // ── Matrículas ──────────────────────────────────────────────────────────

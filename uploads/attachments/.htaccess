@@ -1,0 +1,6 @@
+# Segurança: não executar arquivos PHP nesta pasta
+Options -ExecCGI
+RemoveHandler .php .php3 .php4 .php5 .phtml .phar
+<FilesMatch "\.(php\d?|phtml|phar)$">
+    Require all denied
+</FilesMatch>

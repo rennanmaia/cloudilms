@@ -198,7 +198,9 @@ $currentIndex = array_search($lessonId, array_column($lessons, 'id'));
 $prevLesson   = $currentIndex > 0 ? $lessons[$currentIndex - 1] : null;
 $nextLesson   = $currentIndex < count($lessons) - 1 ? $lessons[$currentIndex + 1] : null;
 
-$embedUrl = GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']);
+$hasVideo = !empty($lesson['gdrive_file_id']);
+$embedUrl = $hasVideo ? GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']) : '';
+$attachments = $model->getAttachmentsByLesson($lessonId);
 $pct = count($lessons) ? round(count($progress) / count($lessons) * 100) : 0;
 
 siteHeader($lesson['title'] . ' - ' . $course['title']);
@@ -319,6 +321,7 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
 
   <!-- Player principal -->
   <div class="watch-main">
+    <?php if ($hasVideo): ?>
     <div class="video-container" id="videoContainer">
       <iframe id="lessonIframe"
               src="<?= htmlspecialchars($embedUrl) ?>"
@@ -333,7 +336,7 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
       <!-- Cobre toda a barra de controles inferior do Drive (progresso + play + volume) -->
       <div id="seekBlocker" class="gdrive-controls-blocker"></div>
     </div>
-
+    <?php endif; ?>
     <div class="watch-controls">
       <div class="watch-lesson-title">
         <h2><?= htmlspecialchars($lesson['title']) ?></h2>
@@ -360,6 +363,82 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
         <?php endif; ?>
       </div>
     </div>
+
+    <?php if (!empty($lesson['body_text'])): ?>
+    <div class="lesson-body">
+      <?= $lesson['body_text'] /* HTML armazenado pelo admin — sanitizado no input */ ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($attachments): ?>
+    <div class="lesson-attachments">
+      <h3 class="lesson-attachments-title">📎 Anexos</h3>
+      <?php foreach ($attachments as $att):
+            $attMime  = $att['mime_type'] ?? '';
+            $isLocal  = !empty($att['file_path']);
+            $isVideo  = str_starts_with($attMime, 'video/');
+            $isAudio  = str_starts_with($attMime, 'audio/');
+            $isPdf    = $attMime === 'application/pdf';
+            $isImage  = str_starts_with($attMime, 'image/');
+            if ($isLocal) {
+                $attDownload = APP_URL . '/download.php?attachment=' . $att['id'];
+                $attEmbed    = $attDownload;
+            } else {
+                $attDownload = GoogleDrive::getDirectUrl($att['gdrive_file_id'] ?? '');
+                $attEmbed    = GoogleDrive::getEmbedUrl($att['gdrive_file_id'] ?? '');
+            }
+      ?>
+      <div class="attachment-item">
+        <div class="attachment-header">
+          <span class="attachment-icon">
+            <?php if ($isVideo): ?>🎬
+            <?php elseif ($isAudio): ?>🎵
+            <?php elseif ($isPdf): ?>📄
+            <?php elseif ($isImage): ?>🖼️
+            <?php else: ?>📎<?php endif; ?>
+          </span>
+          <span class="attachment-name"><?= htmlspecialchars($att['title']) ?></span>
+          <a href="<?= htmlspecialchars($attDownload) ?>" target="_blank"
+             class="btn btn-sm btn-secondary attachment-download">⬇ Baixar</a>
+        </div>
+        <?php if ($isLocal && $isVideo): ?>
+        <div class="attachment-embed">
+          <video controls preload="metadata" style="width:100%;height:100%;background:#000;display:block">
+            <source src="<?= htmlspecialchars($attEmbed) ?>" type="<?= htmlspecialchars($attMime) ?>">
+          </video>
+        </div>
+        <?php elseif ($isLocal && $isAudio): ?>
+        <div class="attachment-embed-audio">
+          <audio controls preload="metadata" style="width:100%">
+            <source src="<?= htmlspecialchars($attEmbed) ?>" type="<?= htmlspecialchars($attMime) ?>">
+          </audio>
+        </div>
+        <?php elseif ($isLocal && $isPdf): ?>
+        <div class="attachment-embed attachment-embed--pdf">
+          <iframe src="<?= htmlspecialchars($attEmbed) ?>" width="100%" height="100%" frameborder="0"></iframe>
+        </div>
+        <?php elseif (!$isLocal && ($isVideo || $isAudio)): ?>
+        <div class="attachment-embed">
+          <iframe src="<?= htmlspecialchars($attEmbed) ?>"
+                  width="100%" height="100%"
+                  frameborder="0" allow="autoplay" allowfullscreen
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
+          ></iframe>
+        </div>
+        <?php elseif (!$isLocal && $isPdf): ?>
+        <div class="attachment-embed attachment-embed--pdf">
+          <iframe src="<?= htmlspecialchars($attEmbed) ?>"
+                  width="100%" height="100%"
+                  frameborder="0"
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-presentation"
+          ></iframe>
+        </div>
+        <?php endif; ?>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
   </div>
 </div>
 

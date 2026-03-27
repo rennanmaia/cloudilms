@@ -170,6 +170,81 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($lessonId) $model->deleteLesson($lessonId);
                 header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode('Aula removida.'));
                 exit;
+
+            case 'save_lesson':
+                $lessonId  = (int)($_POST['lesson_id'] ?? 0);
+                $courseId  = $id ?: (int)($_POST['course_id'] ?? 0);
+                $title     = trim($_POST['title'] ?? '');
+                $videoUrl  = trim($_POST['gdrive_video_url'] ?? '');
+                $bodyText  = trim($_POST['body_text'] ?? '');
+                $topicRaw  = $_POST['topic_id'] ?? '';
+                $topicId   = ($topicRaw === '' || $topicRaw === '0') ? null : (int)$topicRaw;
+
+                if (!$title) { $error = 'Título é obrigatório.'; $action = $lessonId ? 'edit_lesson' : 'new_lesson'; break; }
+
+                $gdriveFileId = null;
+                $mimeType     = null;
+                if ($videoUrl !== '') {
+                    $extracted = GoogleDrive::extractFolderId($videoUrl);
+                    if (!$extracted) { $error = 'URL/ID do vídeo no Google Drive inválido.'; $action = $lessonId ? 'edit_lesson' : 'new_lesson'; break; }
+                    $gdriveFileId = $extracted;
+                    $mimeType     = 'video/mp4';
+                }
+
+                if ($lessonId) {
+                    $model->updateLesson($lessonId, $title, $gdriveFileId, $mimeType, $bodyText ?: null);
+                    $model->assignLessonToTopic($lessonId, $topicId);
+                    header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$lessonId}&msg=" . urlencode('Aula atualizada.'));
+                } else {
+                    $newId = $model->createManualLesson($courseId, $topicId, $title, $gdriveFileId, $mimeType, $bodyText ?: null);
+                    header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$newId}&msg=" . urlencode('Aula criada.'));
+                }
+                exit;
+
+            case 'add_attachment':
+                $lessonId = (int)($_POST['lesson_id'] ?? 0);
+                $courseId = $id ?: (int)($_POST['course_id'] ?? 0);
+                if (!$lessonId) { $error = 'Aula não encontrada.'; $action = 'edit_lesson'; break; }
+
+                $uploadDir = __DIR__ . '/../uploads/attachments/';
+                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+
+                $files = $_FILES['att_files'] ?? null;
+                if (!$files || empty($files['name'][0])) {
+                    $error = 'Selecione pelo menos um arquivo.';
+                    $action = 'edit_lesson';
+                    break;
+                }
+
+                $dangerousExts = ['php','phtml','php3','php4','php5','phar','exe','bat','cmd','sh','py','rb','pl','cgi'];
+                $added = 0;
+                for ($i = 0; $i < count($files['name']); $i++) {
+                    if ($files['error'][$i] !== UPLOAD_ERR_OK) continue;
+                    $origName = $files['name'][$i];
+                    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+                    if (in_array($ext, $dangerousExts)) continue;
+
+                    $finfo = new finfo(FILEINFO_MIME_TYPE);
+                    $mime  = $finfo->file($files['tmp_name'][$i]);
+
+                    $newName = bin2hex(random_bytes(16)) . ($ext ? '.' . $ext : '');
+                    if (move_uploaded_file($files['tmp_name'][$i], $uploadDir . $newName)) {
+                        $title = pathinfo($origName, PATHINFO_FILENAME);
+                        $model->addAttachment($lessonId, $title, null, $mime, $newName);
+                        $added++;
+                    }
+                }
+                $msg = $added > 0 ? "{$added} arquivo(s) adicionado(s)." : 'Nenhum arquivo válido foi enviado.';
+                header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$lessonId}&msg=" . urlencode($msg));
+                exit;
+
+            case 'delete_attachment':
+                $lessonId   = (int)($_POST['lesson_id'] ?? 0);
+                $courseId   = $id ?: (int)($_POST['course_id'] ?? 0);
+                $attId      = (int)($_POST['att_id'] ?? 0);
+                if ($attId) $model->deleteAttachment($attId);
+                header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$lessonId}&msg=" . urlencode('Anexo removido.'));
+                exit;
         }
     }
 }
@@ -293,6 +368,214 @@ if ($action === 'new' || $action === 'edit') {
     exit;
 }
 
+if ($action === 'new_lesson' || $action === 'edit_lesson') {
+    $courseId = $id;
+    $course   = $model->getCourseById($courseId);
+    if (!$course) { header('Location: courses.php'); exit; }
+
+    $lessonId = (int)($_GET['lesson_id'] ?? 0);
+    $lesson   = $lessonId ? $model->getLessonById($lessonId) : null;
+    if ($lessonId && !$lesson) { header("Location: courses.php?action=lessons&id={$courseId}"); exit; }
+
+    $attachments = $lesson ? $model->getAttachmentsByLesson($lessonId) : [];
+    $topics      = $model->getTopicsByCourse($courseId);
+
+    $pageTitle = $lesson ? 'Editar Aula' : 'Nova Aula';
+    adminHeader($pageTitle . ': ' . $course['title'], 'courses');
+
+    if ($error): ?>
+    <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+    <?php endif; ?>
+    <?php if (isset($_GET['msg'])): ?>
+    <div class="alert alert-success"><?= htmlspecialchars($_GET['msg']) ?></div>
+    <?php endif; ?>
+
+    <div class="card mb-2">
+      <div class="card-header">
+        <h2><?= $pageTitle ?></h2>
+        <a href="courses.php?action=lessons&id=<?= $courseId ?>" class="btn btn-sm">← Voltar para aulas</a>
+      </div>
+      <div class="card-body">
+        <form method="post" id="lessonForm" action="courses.php?action=save_lesson&id=<?= $courseId ?>">
+          <input type="hidden" name="csrf"      value="<?= $csrf ?>">
+          <input type="hidden" name="course_id" value="<?= $courseId ?>">
+          <input type="hidden" name="lesson_id" value="<?= $lessonId ?>">
+
+          <div class="form-group">
+            <label>Título da aula *</label>
+            <input type="text" name="title" class="form-control" required
+                   value="<?= htmlspecialchars($lesson['title'] ?? '') ?>"
+                   placeholder="Ex: Introdução ao módulo">
+          </div>
+
+          <div class="form-group">
+            <label>Tópico</label>
+            <select name="topic_id" class="form-control">
+              <option value="">— Sem tópico —</option>
+              <?php foreach ($topics as $t): ?>
+              <option value="<?= $t['id'] ?>"
+                <?= (isset($lesson['topic_id']) && (int)$lesson['topic_id'] === (int)$t['id']) ? 'selected' : '' ?>>
+                <?= htmlspecialchars($t['title']) ?>
+              </option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>Vídeo no Google Drive (opcional)</label>
+            <input type="text" name="gdrive_video_url" class="form-control"
+                   value="<?= htmlspecialchars(($lesson && $lesson['gdrive_file_id'] && !str_starts_with($lesson['gdrive_file_id'], 'manual_')) ? 'https://drive.google.com/file/d/' . $lesson['gdrive_file_id'] . '/view' : '') ?>"
+                   placeholder="Cole a URL do vídeo no Google Drive (ou deixe em branco)">
+            <small class="help-text">Ex: https://drive.google.com/file/d/XXXXX/view — Deixe em branco para aulas só com texto ou arquivos.</small>
+          </div>
+
+          <div class="form-group">
+            <label>Texto / Conteúdo da aula</label>
+            <div class="rte-wrapper">
+              <div class="rte-toolbar" id="rteToolbar">
+                <button type="button" class="rte-btn" data-cmd="bold" title="Negrito (Ctrl+B)"><b>B</b></button>
+                <button type="button" class="rte-btn" data-cmd="italic" title="Itálico (Ctrl+I)"><i>I</i></button>
+                <button type="button" class="rte-btn" data-cmd="underline" title="Sublinhado (Ctrl+U)"><u>U</u></button>
+                <span class="rte-sep"></span>
+                <button type="button" class="rte-btn" data-cmd="formatBlock" data-val="h2" title="Título 2">H2</button>
+                <button type="button" class="rte-btn" data-cmd="formatBlock" data-val="h3" title="Título 3">H3</button>
+                <button type="button" class="rte-btn" data-cmd="formatBlock" data-val="p" title="Parágrafo">¶</button>
+                <span class="rte-sep"></span>
+                <button type="button" class="rte-btn" data-cmd="insertUnorderedList" title="Lista com marcadores">• Lista</button>
+                <button type="button" class="rte-btn" data-cmd="insertOrderedList" title="Lista numerada">1. Lista</button>
+                <span class="rte-sep"></span>
+                <button type="button" class="rte-btn" data-cmd="createLink" title="Inserir link">🔗</button>
+                <button type="button" class="rte-btn" data-cmd="formatBlock" data-val="blockquote" title="Citação">❝</button>
+                <span class="rte-sep"></span>
+                <button type="button" class="rte-btn" data-cmd="removeFormat" title="Limpar formatação">⊘ Limpar</button>
+              </div>
+              <div class="rte-content" id="rteContent" contenteditable="true"><?= $lesson['body_text'] ?? '' ?></div>
+            </div>
+            <textarea name="body_text" id="bodyTextHidden" style="display:none"></textarea>
+          </div>
+
+          <button type="submit" class="btn btn-primary">💾 Salvar aula</button>
+          <a href="courses.php?action=lessons&id=<?= $courseId ?>" class="btn">Cancelar</a>
+        </form>
+      </div>
+    </div>
+
+    <?php if ($lesson): ?>
+    <!-- Anexos -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📎 Anexos (<?= count($attachments) ?>)</h2>
+      </div>
+
+      <?php if ($attachments): ?>
+      <table class="table">
+        <thead><tr><th>Título</th><th>Tipo</th><th>Arquivo</th><th></th></tr></thead>
+        <tbody>
+          <?php foreach ($attachments as $att): ?>
+          <tr>
+            <td><?= htmlspecialchars($att['title']) ?></td>
+            <td><code><?= htmlspecialchars($att['mime_type'] ?? '—') ?></code></td>
+            <td><code style="font-size:.8em;word-break:break-all"><?= htmlspecialchars(!empty($att['file_path']) ? $att['file_path'] : ($att['gdrive_file_id'] ?? '—')) ?></code></td>
+            <td>
+              <?php if (!empty($att['file_path'])): ?>
+              <a href="<?= APP_URL ?>/download.php?attachment=<?= $att['id'] ?>" target="_blank" class="btn btn-sm btn-secondary">🔗</a>
+              <?php elseif (!empty($att['gdrive_file_id'])): ?>
+              <a href="https://drive.google.com/file/d/<?= urlencode($att['gdrive_file_id']) ?>/view" target="_blank" class="btn btn-sm btn-secondary">🔗</a>
+              <?php endif; ?>
+              <form method="post" action="courses.php?action=delete_attachment&id=<?= $courseId ?>" style="display:inline"
+                    onsubmit="return confirm('Remover este anexo?')">
+                <input type="hidden" name="csrf"      value="<?= $csrf ?>">
+                <input type="hidden" name="lesson_id" value="<?= $lessonId ?>">
+                <input type="hidden" name="course_id" value="<?= $courseId ?>">
+                <input type="hidden" name="att_id"    value="<?= $att['id'] ?>">
+                <button class="btn btn-sm btn-danger">🗑</button>
+              </form>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      <?php endif; ?>
+
+      <div class="card-body" style="border-top:1px solid var(--bg3)">
+        <h3 style="margin-bottom:1rem;font-size:1rem">Enviar arquivo(s)</h3>
+        <form method="post" action="courses.php?action=add_attachment&id=<?= $courseId ?>"
+              enctype="multipart/form-data">
+          <input type="hidden" name="csrf"      value="<?= $csrf ?>">
+          <input type="hidden" name="lesson_id" value="<?= $lessonId ?>">
+          <input type="hidden" name="course_id" value="<?= $courseId ?>">
+          <div style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="margin:0;flex:1;min-width:280px">
+              <label>Arquivo(s) *</label>
+              <input type="file" name="att_files[]" multiple required class="form-control"
+                     accept=".pdf,.mp4,.mp3,.m4a,.ogg,.webm,.avi,.mov,.mkv,.jpg,.jpeg,.png,.gif,.webp,.zip,.rar,.7z,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv">
+              <small class="help-text">Selecione um ou mais arquivos. Arquivos PHP/executáveis são bloqueados.</small>
+            </div>
+            <button type="submit" class="btn btn-primary" style="flex-shrink:0">⬆ Enviar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    <?php else: ?>
+    <p style="color:#64748b;margin-top:1rem">Salve a aula primeiro para poder adicionar anexos.</p>
+    <?php endif; ?>
+
+    <script>
+    /* ── Rich Text Editor ──────────────────────────────────────────────── */
+    (function () {
+        const toolbar = document.getElementById('rteToolbar');
+        const content = document.getElementById('rteContent');
+        const hidden  = document.getElementById('bodyTextHidden');
+        const form    = document.getElementById('lessonForm');
+        if (!toolbar || !content || !hidden) return;
+
+        // Inicializa campo oculto com conteúdo atual
+        hidden.value = content.innerHTML;
+
+        // Sincroniza antes do submit
+        if (form) form.addEventListener('submit', () => { hidden.value = content.innerHTML; });
+
+        // Clique nos botões da barra
+        toolbar.querySelectorAll('.rte-btn[data-cmd]').forEach(btn => {
+            btn.addEventListener('mousedown', e => {
+                e.preventDefault();
+                const cmd = btn.dataset.cmd;
+                const val = btn.dataset.val || null;
+                content.focus();
+                if (cmd === 'createLink') {
+                    const url = prompt('URL do link:', 'https://');
+                    if (url) document.execCommand('createLink', false, url);
+                } else if (val) {
+                    document.execCommand(cmd, false, val);
+                } else {
+                    document.execCommand(cmd, false, null);
+                }
+                updateToolbarState();
+            });
+        });
+
+        // Atualiza botões ativos
+        function updateToolbarState() {
+            toolbar.querySelectorAll('.rte-btn[data-cmd]').forEach(btn => {
+                const cmd = btn.dataset.cmd;
+                const val = btn.dataset.val;
+                try {
+                    const active = val
+                        ? document.queryCommandValue(cmd) === val
+                        : document.queryCommandState(cmd);
+                    btn.classList.toggle('rte-active', !!active);
+                } catch (_) {}
+            });
+        }
+        content.addEventListener('keyup', updateToolbarState);
+        content.addEventListener('mouseup', updateToolbarState);
+    })();
+    </script>
+    <?php
+    adminFooter();
+    exit;
+}
+
 if ($action === 'lessons') {
     $course = $model->getCourseById($id);
     if (!$course) { header('Location: courses.php'); exit; }
@@ -332,6 +615,7 @@ if ($action === 'lessons') {
         </div>
         <div style="display:flex;gap:.75rem;align-items:center">
           <a href="quizzes.php?course_id=<?= $id ?>" class="btn btn-sm btn-secondary">📝 Questionários</a>
+          <a href="courses.php?action=new_lesson&id=<?= $id ?>" class="btn btn-sm btn-primary">+ Nova aula</a>
           <a href="<?= htmlspecialchars($course['gdrive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-secondary">🔗 Abrir no Drive</a>
           <form method="post" action="courses.php?action=sync&id=<?= $id ?>">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
@@ -474,6 +758,7 @@ if ($action === 'lessons') {
                   </div>
                   <div class="lesson-actions">
                     <a href="<?= APP_URL ?>/watch.php?lesson=<?= $l['id'] ?>" target="_blank" class="btn btn-sm btn-secondary">▶</a>
+                    <a href="courses.php?action=edit_lesson&id=<?= $id ?>&lesson_id=<?= $l['id'] ?>" class="btn btn-sm" title="Editar aula">✏️</a>
                     <form method="post" action="courses.php?action=delete_lesson&id=<?= $id ?>" style="display:inline" onsubmit="return confirm('Remover esta aula?')">
                       <input type="hidden" name="csrf" value="<?= $csrf ?>">
                       <input type="hidden" name="lesson_id" value="<?= $l['id'] ?>">
