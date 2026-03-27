@@ -73,53 +73,58 @@ $cert = $certModel->issue($userId, $course['id'], $settings, $userRow, $course);
 renderCertificate($cert, $settings, false);
 exit;
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function certFormatDate(string $dateStr): string {
+    $months = [
+        1=>'janeiro',  2=>'fevereiro', 3=>'março',    4=>'abril',
+        5=>'maio',     6=>'junho',     7=>'julho',    8=>'agosto',
+        9=>'setembro', 10=>'outubro', 11=>'novembro', 12=>'dezembro',
+    ];
+    $ts = strtotime($dateStr);
+    if (!$ts) return $dateStr;
+    return (int)date('d', $ts) . ' de ' . $months[(int)date('n', $ts)] . ' de ' . date('Y', $ts);
+}
+
 // ── Renderização do certificado ──────────────────────────────────────────────
 function renderCertificate(?array $cert, array $settings, bool $notFound): void {
 
-    $siteTitle    = htmlspecialchars($settings['site_name']         ?? 'CloudiLMS');
-    $certTitle    = htmlspecialchars($settings['cert_title']        ?? 'Certificado de Conclusão');
-    $primaryColor = htmlspecialchars($settings['cert_primary_color'] ?? '#1e293b');
-    $accentColor  = htmlspecialchars($settings['cert_accent_color']  ?? '#c9a84c');
-    $footerText   = htmlspecialchars($settings['cert_footer']        ?? '');
+    $appName    = htmlspecialchars($settings['site_name']  ?? 'CloudiLMS');
+    $certTitle  = htmlspecialchars($settings['cert_title'] ?? 'Certificado de Conclusão');
+    $footerText = htmlspecialchars($settings['cert_footer'] ?? '');
+    $certNote   = htmlspecialchars(trim($settings['cert_body'] ?? ''));
 
-    $student  = '';
-    $course   = '';
-    $issuer   = '';
-    $workload = '';
-    $wloadHtml = '';
-    $issuedAt = '';
-    $code     = '';
-    $verifyUrl = '';
-    $bodyText  = '';
+    $primaryColor = $settings['cert_primary_color'] ?? '#1a3a5c';
+    $accentColor  = $settings['cert_accent_color']  ?? '#c9a84c';
+    // Prevent CSS injection via color fields
+    if (!preg_match('/^#[0-9a-f]{3,8}$/i', $primaryColor)) $primaryColor = '#1a3a5c';
+    if (!preg_match('/^#[0-9a-f]{3,8}$/i', $accentColor))  $accentColor  = '#c9a84c';
+    $pC = htmlspecialchars($primaryColor);
+    $aC = htmlspecialchars($accentColor);
+
+    // Validate background image URL — only http/https, strip CSS-breaking chars
+    $bgRaw  = trim($settings['cert_bg_image'] ?? '');
+    $bgSafe = '';
+    if ($bgRaw && preg_match('/^https?:\/\//i', $bgRaw)) {
+        $bgSafe = str_replace(["'", '"', '\\', "\n", "\r", ')'], ['%27','%22','%5C','','','%29'], $bgRaw);
+    }
+
+    $student = $course = $issuer = $workload = $issuedAt = $code = $verifyUrl = '';
 
     if ($cert) {
         $student   = htmlspecialchars($cert['snapshot_student_name']);
         $course    = htmlspecialchars($cert['snapshot_course_title']);
         $issuer    = htmlspecialchars($cert['snapshot_issuer']);
         $workload  = CertificateModel::formatWorkload((int) $cert['workload_minutes']);
-        $issuedAt  = strftime('%d de %B de %Y', strtotime($cert['issued_at']));
-        $code      = htmlspecialchars($cert['cert_code']);
+        $issuedAt  = certFormatDate($cert['issued_at']);
+        $code      = $cert['cert_code'];
         $verifyUrl = htmlspecialchars(APP_URL . '/certificate.php?code=' . $cert['cert_code']);
-
-        $mins = (int) $cert['workload_minutes'];
-        $wloadHtml = $mins >= 60
-            ? '<strong>' . floor($mins / 60) . 'h' . ($mins % 60 ? str_pad($mins % 60, 2, '0', STR_PAD_LEFT) . 'min' : '') . '</strong>'
-            : '<strong>' . $mins . ' min</strong>';
-
-        $bodyTpl  = $settings['cert_body']
-            ?? '{student_name} concluiu com êxito o curso {course_name}, com carga horária de {workload}.';
-        $bodyText = str_replace(
-            ['{student_name}', '{course_name}', '{workload}', '{issued_date}', '{issuer}'],
-            [$student,         $course,          $workload,    $issuedAt,       $issuer],
-            htmlspecialchars($bodyTpl)
-        );
     }
     ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title><?= $certTitle ?> — <?= $siteTitle ?></title>
+  <title><?= $certTitle ?> — <?= $appName ?></title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     @page { size: A4 landscape; margin: 0; }
@@ -127,215 +132,269 @@ function renderCertificate(?array $cert, array $settings, bool $notFound): void 
 
     body {
       font-family: Georgia, 'Times New Roman', serif;
-      background: #eef2f7;
+      background: #c8d3de;
     }
 
-    /* ── Barra de ações (tela) ── */
+    /* ── Action toolbar ───────────────────────────────────────────────────── */
     .cert-toolbar {
       display: flex; gap: .75rem; justify-content: center; align-items: center;
-      padding: .75rem 1rem; background: #1e293b;
+      padding: .65rem 1rem; background: #0f172a;
       position: sticky; top: 0; z-index: 50;
+      border-bottom: 2px solid <?= $aC ?>;
     }
     .cert-toolbar a, .cert-toolbar button {
-      padding: .4rem 1.1rem; border-radius: .35rem;
-      font-family: system-ui, sans-serif; font-size: .875rem; font-weight: 600;
+      padding: .4rem 1.15rem; border-radius: .3rem;
+      font-family: system-ui, sans-serif; font-size: .84rem; font-weight: 600;
       border: none; cursor: pointer; text-decoration: none; line-height: 1.5;
+      transition: opacity .15s;
     }
-    .cert-toolbar .btn-print  { background: <?= $accentColor ?>; color: #0f172a; }
-    .cert-toolbar .btn-back   { background: #334155; color: #f1f5f9; }
-    .cert-toolbar .btn-share  { background: #0f766e; color: #f0fdfa; }
+    .cert-toolbar a:hover, .cert-toolbar button:hover { opacity: .8; }
+    .btn-back  { background: #334155; color: #f1f5f9; }
+    .btn-print { background: <?= $aC ?>; color: #0f172a; }
+    .btn-share { background: #0f766e; color: #f0fdfa; }
 
-    /* ── Página do certificado ── */
+    /* ── Certificate page ─────────────────────────────────────────────────── */
     .cert-page {
       width: 297mm; min-height: 210mm;
-      margin: 1.5rem auto;
-      background: #fff;
-      position: relative;
-      overflow: hidden;
-      box-shadow: 0 8px 40px rgba(0,0,0,.22);
+      margin: 1.5rem auto 3rem;
+      position: relative; overflow: hidden;
       display: flex; flex-direction: column;
+      background-color: #fdf8ee;
+      <?php if ($bgSafe): ?>background-image: url('<?= $bgSafe ?>'); background-size: cover; background-position: center;<?php endif; ?>
+      box-shadow: 0 12px 60px rgba(0,0,0,.38);
     }
+    <?php if ($bgSafe): ?>
+    .cert-page::before {
+      content: ''; position: absolute; inset: 0;
+      background: rgba(253,248,238,.87); z-index: 0;
+    }
+    <?php endif; ?>
 
-    /* Moldura decorativa */
-    .cert-frame-outer {
-      position: absolute; inset: 9px;
-      border: 3px solid <?= $primaryColor ?>;
-      pointer-events: none; z-index: 2;
+    /* ── Decorative frames + corner ornaments ─────────────────────────────── */
+    .cert-frame-outer { position: absolute; inset: 8px;  border: 3px solid <?= $pC ?>; pointer-events: none; z-index: 5; }
+    .cert-frame-inner { position: absolute; inset: 14px; border: 1px solid <?= $aC ?>; pointer-events: none; z-index: 5; }
+    .cert-corner {
+      position: absolute; z-index: 6; pointer-events: none;
+      font-size: 1.25rem; color: <?= $aC ?>; line-height: 1;
     }
-    .cert-frame-inner {
-      position: absolute; inset: 15px;
-      border: 1px solid <?= $accentColor ?>;
-      pointer-events: none; z-index: 2;
-    }
+    .cert-corner--tl { top: 5px; left: 5px; }
+    .cert-corner--tr { top: 5px; right: 5px; display: block; transform: scaleX(-1); }
+    .cert-corner--bl { bottom: 5px; left: 5px; display: block; transform: scaleY(-1); }
+    .cert-corner--br { bottom: 5px; right: 5px; display: block; transform: scale(-1,-1); }
 
-    /* Faixa de cabeçalho */
+    /* Content wrapper above bg/overlay */
+    .cert-inner { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; }
+
+    /* ── Header ───────────────────────────────────────────────────────────── */
     .cert-header {
-      background: <?= $primaryColor ?>;
-      padding: 1.6rem 2.5rem 1.3rem;
-      text-align: center;
-      position: relative; z-index: 3;
+      text-align: center; padding: 1.75rem 3rem 1.1rem;
+      border-bottom: 1px solid <?= $aC ?>;
     }
-    .cert-header-site {
+    .cert-platform {
       font-family: system-ui, sans-serif;
-      font-size: .75rem; letter-spacing: .18em;
-      text-transform: uppercase; color: <?= $accentColor ?>; opacity: .85;
+      font-size: .68rem; letter-spacing: .28em;
+      text-transform: uppercase; color: <?= $aC ?>; margin-bottom: .5rem;
     }
-    .cert-header-title {
-      font-size: 1.85rem; font-weight: 700;
-      color: #fff; letter-spacing: .04em;
-      margin-top: .35rem;
+    .cert-title-text {
+      font-family: Georgia, serif;
+      font-size: 1.95rem; font-weight: 700;
+      color: <?= $pC ?>; letter-spacing: .055em; line-height: 1.15;
     }
+    .cert-ornament { display: flex; align-items: center; justify-content: center; gap: .9rem; margin-top: .65rem; }
+    .cert-orn-arm   { height: 1px; width: 52px; background: linear-gradient(to right, transparent, <?= $aC ?>); }
+    .cert-orn-arm-r { background: linear-gradient(to left, transparent, <?= $aC ?>); }
+    .cert-orn-sym   { color: <?= $aC ?>; font-size: 1.05rem; }
 
-    /* Corpo */
+    /* ── Body ─────────────────────────────────────────────────────────────── */
     .cert-body {
-      flex: 1; padding: 1.6rem 3.5rem 1rem;
-      text-align: center; position: relative; z-index: 3;
+      flex: 1; padding: 1.15rem 4rem .8rem;
+      text-align: center; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0;
     }
-    .cert-intro {
+    .cert-we-certify {
       font-family: system-ui, sans-serif;
-      font-size: .8rem; letter-spacing: .12em;
-      text-transform: uppercase; color: #64748b;
-      margin-bottom: .6rem;
+      font-size: .68rem; letter-spacing: .18em;
+      text-transform: uppercase; color: #7e8fa2; margin-bottom: .3rem;
     }
-    .cert-student {
-      font-size: 2.3rem; color: <?= $primaryColor ?>;
-      font-weight: bold; display: inline-block;
-      border-bottom: 2px solid <?= $accentColor ?>;
-      padding-bottom: .2rem; margin-bottom: .9rem;
+    .cert-student-name {
+      font-size: 2.5rem; font-style: italic; font-weight: bold;
+      color: <?= $pC ?>; letter-spacing: .01em; line-height: 1.2; margin-top: .15rem;
     }
-    .cert-body-text {
-      font-size: 1rem; color: #334155; line-height: 1.75;
-      max-width: 62%; margin: 0 auto .9rem;
+    .cert-name-underline {
+      width: 320px; max-width: 74%; height: 2px;
+      background: linear-gradient(to right, transparent 0%, <?= $aC ?> 30%, <?= $aC ?> 70%, transparent 100%);
+      margin: .4rem auto .8rem;
     }
-    .cert-course-highlight {
-      font-style: italic; font-weight: bold; color: <?= $primaryColor ?>;
-    }
-    .cert-workload {
-      display: inline-flex; align-items: center; gap: .7rem;
-      background: #f8fafc; border: 1px solid #e2e8f0;
-      border-radius: .4rem; padding: .45rem 1rem;
+    .cert-completed-label {
       font-family: system-ui, sans-serif;
+      font-size: .85rem; color: #4a5568; margin-bottom: .3rem;
     }
-    .cert-workload span { font-size: .75rem; color: #64748b; }
-    .cert-workload strong { font-size: 1.2rem; color: <?= $primaryColor ?>; }
-
-    /* Marca d'água */
-    .cert-watermark {
-      position: absolute; bottom: 22%; left: 50%;
-      transform: translateX(-50%) rotate(-28deg);
-      font-size: 5.5rem; color: rgba(30,58,95,.035);
-      font-weight: bold; pointer-events: none;
-      white-space: nowrap; z-index: 1; user-select: none;
+    .cert-course-name {
+      font-size: 1.3rem; font-weight: 700; font-style: italic;
+      color: <?= $pC ?>; line-height: 1.35;
+      max-width: 72%; margin: 0 auto .85rem;
     }
+    .cert-info-row { display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; margin-top: .25rem; }
+    .cert-info-box { border: 1px solid <?= $aC ?>; border-radius: .3rem; padding: .38rem 1.1rem; text-align: center; min-width: 140px; }
+    .cert-info-label {
+      font-family: system-ui, sans-serif; font-size: .6rem; letter-spacing: .14em;
+      text-transform: uppercase; color: #8a9bae; display: block; margin-bottom: .2rem;
+    }
+    .cert-info-value { font-family: system-ui, sans-serif; font-size: .9rem; font-weight: 700; color: <?= $pC ?>; }
+    .cert-note { font-size: .78rem; color: #5a6a7a; font-style: italic; margin-top: .6rem; max-width: 65%; }
 
-    /* Rodapé com assinaturas */
+    /* ── Signature footer ─────────────────────────────────────────────────── */
     .cert-footer {
-      display: grid; grid-template-columns: 1fr 1fr;
-      padding: .75rem 4rem 1rem; gap: 1rem;
-      position: relative; z-index: 3;
+      padding: .5rem 4rem .65rem;
+      border-top: 1px solid <?= $aC ?>;
+      display: grid; grid-template-columns: 1fr 64px 1fr;
+      align-items: end; gap: .75rem;
     }
     .cert-sig { text-align: center; }
-    .cert-sig-line {
-      border-top: 1px solid <?= $primaryColor ?>;
-      padding-top: .4rem; margin-top: 2rem;
+    .cert-sig-line { border-top: 1.5px solid <?= $pC ?>; padding-top: .3rem; margin-top: 1.6rem; }
+    .cert-sig-name { font-family: system-ui, sans-serif; font-weight: 700; font-size: .82rem; color: <?= $pC ?>; }
+    .cert-sig-role { font-family: system-ui, sans-serif; font-size: .68rem; color: #7e8fa2; margin-top: .07rem; }
+    .cert-stamp {
+      display: flex; align-items: center; justify-content: center;
+      width: 54px; height: 54px; border: 2px solid <?= $aC ?>;
+      border-radius: 50%; font-size: 1.45rem; color: <?= $aC ?>; opacity: .55;
+      justify-self: center; align-self: end;
     }
-    .cert-sig-name { font-weight: bold; color: <?= $primaryColor ?>; font-size: .9rem; }
-    .cert-sig-role { font-family: system-ui, sans-serif; font-size: .75rem; color: #64748b; }
 
-    /* Barra inferior */
+    /* ── Meta bar ─────────────────────────────────────────────────────────── */
     .cert-meta {
-      border-top: 1px solid #e2e8f0;
-      padding: .4rem 1.5rem;
+      border-top: 1px solid rgba(0,0,0,.07); padding: .27rem 1.6rem;
       display: flex; justify-content: space-between; align-items: center;
-      font-family: system-ui, sans-serif; font-size: .6rem; color: #94a3b8;
-      position: relative; z-index: 3; background: #fafbfc;
+      font-family: system-ui, sans-serif; font-size: .57rem; color: #94a3b8;
+      background: rgba(253,248,238,.65); position: relative; z-index: 3;
     }
-    .cert-meta a { color: #94a3b8; text-decoration: none; }
+    .cert-meta a { color: #94a3b8; }
     .cert-meta strong { color: #64748b; }
 
-    /* Estado "não encontrado" */
-    .cert-not-found {
-      text-align: center; padding: 5rem 2rem; color: #475569;
-      font-family: system-ui, sans-serif;
+    /* ── Watermark ────────────────────────────────────────────────────────── */
+    .cert-watermark {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%) rotate(-22deg);
+      font-family: system-ui, sans-serif; font-size: 5.5rem; font-weight: 900;
+      letter-spacing: .1em; color: <?= $pC ?>; opacity: .032;
+      white-space: nowrap; pointer-events: none; user-select: none; z-index: 1;
     }
-    .cert-not-found h2 { font-size: 1.4rem; margin-bottom: .75rem; }
-    .cert-not-found a  { color: #1e3a5f; }
 
-    @media print {
-      body { background: #fff; }
-      .cert-toolbar { display: none !important; }
-      .cert-page    { margin: 0; box-shadow: none; width: 100%; }
+    /* ── Not found ────────────────────────────────────────────────────────── */
+    .cert-not-found {
+      flex: 1; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; gap: .8rem;
+      padding: 4rem; text-align: center;
+      font-family: system-ui, sans-serif; color: #475569;
     }
+    .cert-not-found h2 { font-size: 1.4rem; color: <?= $pC ?>; }
+
+    /* ── Print ────────────────────────────────────────────────────────────── */
+    @media print {
+      body { background: white; }
+      .cert-toolbar { display: none !important; }
+      .cert-page { margin: 0; box-shadow: none; width: 100%; min-height: 100vh; }
+    }
+
+    /* ── Responsive ───────────────────────────────────────────────────────── */
     @media (max-width: 900px) {
-      .cert-page { width: 100%; min-height: unset; }
-      .cert-body  { padding: 1.2rem 1.5rem .75rem; }
-      .cert-body-text { max-width: 90%; }
-      .cert-footer { padding: .75rem 1.5rem 1rem; }
+      .cert-page   { width: 100%; min-height: unset; margin: 0; }
+      .cert-body   { padding: 1rem 1.5rem .75rem; }
+      .cert-footer { padding: .5rem 1.5rem .65rem; grid-template-columns: 1fr auto 1fr; }
+      .cert-course-name  { max-width: 95%; }
+      .cert-student-name { font-size: 2rem; }
     }
   </style>
 </head>
 <body>
 
-<?php if (!$notFound): ?>
+<?php if (!$notFound && $cert): ?>
 <div class="cert-toolbar">
-  <a href="<?= APP_URL ?>/dashboard.php" class="btn-back">← Meus cursos</a>
+  <a href="<?= htmlspecialchars(APP_URL) ?>/dashboard.php" class="btn-back">← Meus cursos</a>
   <button onclick="window.print()" class="btn-print">🖨 Imprimir / Salvar PDF</button>
-  <a href="<?= $verifyUrl ?>" class="btn-share" target="_blank">🔗 Link de verificação</a>
+  <a href="<?= $verifyUrl ?>" class="btn-share" target="_blank">🔗 Compartilhar</a>
 </div>
 <?php endif; ?>
 
 <div class="cert-page">
-<?php if ($notFound): ?>
-  <div class="cert-not-found">
-    <h2>Certificado não encontrado</h2>
-    <p>O código informado não corresponde a nenhum certificado válido nesta plataforma.</p>
-    <p style="margin-top:1rem"><a href="<?= APP_URL ?>/index.php">← Ir para o início</a></p>
-  </div>
-
-<?php else: ?>
   <div class="cert-frame-outer"></div>
   <div class="cert-frame-inner"></div>
+  <span class="cert-corner cert-corner--tl">✦</span>
+  <span class="cert-corner cert-corner--tr">✦</span>
+  <span class="cert-corner cert-corner--bl">✦</span>
+  <span class="cert-corner cert-corner--br">✦</span>
 
-  <div class="cert-header">
-    <div class="cert-header-site"><?= $siteTitle ?></div>
-    <div class="cert-header-title"><?= $certTitle ?></div>
+  <?php if ($notFound): ?>
+  <div class="cert-not-found">
+    <div style="font-size:3rem">🔍</div>
+    <h2>Certificado não encontrado</h2>
+    <p>O código informado não corresponde a nenhum certificado válido nesta plataforma.</p>
+    <p style="margin-top:.75rem">
+      <a href="<?= htmlspecialchars(APP_URL) ?>/index.php" style="color:<?= $pC ?>">← Ir para o início</a>
+    </p>
   </div>
 
-  <div class="cert-body">
-    <div class="cert-intro">Certificamos que</div>
-    <div class="cert-student"><?= $student ?></div>
-    <div class="cert-body-text"><?= $bodyText ?></div>
-    <?php if ($cert['workload_minutes']): ?>
-    <div class="cert-workload">
-      <span>Carga horária total</span>
-      <?= $wloadHtml ?>
-    </div>
-    <?php endif; ?>
-    <div class="cert-watermark"><?= $siteTitle ?></div>
-  </div>
+  <?php else: ?>
+  <div class="cert-watermark"><?= $appName ?></div>
+  <div class="cert-inner">
 
-  <div class="cert-footer">
-    <div class="cert-sig">
-      <div class="cert-sig-line">
-        <div class="cert-sig-name"><?= $issuer ?></div>
-        <div class="cert-sig-role">Instituição / Emissor</div>
+    <header class="cert-header">
+      <div class="cert-platform">☁ <?= $appName ?></div>
+      <div class="cert-title-text"><?= $certTitle ?></div>
+      <div class="cert-ornament">
+        <span class="cert-orn-arm"></span>
+        <span class="cert-orn-sym">❧</span>
+        <span class="cert-orn-arm cert-orn-arm-r"></span>
       </div>
-    </div>
-    <div class="cert-sig">
-      <div class="cert-sig-line">
-        <div class="cert-sig-name"><?= $issuedAt ?></div>
-        <div class="cert-sig-role">Data de emissão</div>
-      </div>
-    </div>
-  </div>
+    </header>
 
-  <div class="cert-meta">
-    <span>Cód. de verificação: <strong><?= $code ?></strong></span>
-    <?php if ($footerText): ?><span><?= $footerText ?></span><?php endif; ?>
-    <span>Verificar em: <a href="<?= $verifyUrl ?>"><?= $verifyUrl ?></a></span>
-  </div>
-<?php endif; ?>
-</div>
+    <section class="cert-body">
+      <p class="cert-we-certify">Certificamos que</p>
+      <p class="cert-student-name"><?= $student ?></p>
+      <div class="cert-name-underline"></div>
+      <p class="cert-completed-label">concluiu com êxito o curso</p>
+      <p class="cert-course-name"><?= $course ?></p>
+      <div class="cert-info-row">
+        <?php if ((int)$cert['workload_minutes'] > 0): ?>
+        <div class="cert-info-box">
+          <span class="cert-info-label">Carga horária</span>
+          <span class="cert-info-value">⏱ <?= $workload ?></span>
+        </div>
+        <?php endif; ?>
+        <div class="cert-info-box">
+          <span class="cert-info-label">Data de emissão</span>
+          <span class="cert-info-value">📅 <?= $issuedAt ?></span>
+        </div>
+      </div>
+      <?php if ($certNote): ?><p class="cert-note"><?= $certNote ?></p><?php endif; ?>
+    </section>
+
+    <footer class="cert-footer">
+      <div class="cert-sig">
+        <div class="cert-sig-line">
+          <div class="cert-sig-name"><?= $issuer ?></div>
+          <div class="cert-sig-role">Emissor</div>
+        </div>
+      </div>
+      <div class="cert-stamp">☁</div>
+      <div class="cert-sig">
+        <div class="cert-sig-line">
+          <div class="cert-sig-name"><?= $issuedAt ?></div>
+          <div class="cert-sig-role">Data de emissão</div>
+        </div>
+      </div>
+    </footer>
+
+    <div class="cert-meta">
+      <span>Cód. verificação: <strong><?= htmlspecialchars(strtoupper(substr($code, 0, 8))) ?>…</strong></span>
+      <?php if ($footerText): ?><span><?= $footerText ?></span><?php endif; ?>
+      <span>Autenticidade: <a href="<?= $verifyUrl ?>"><?= $verifyUrl ?></a></span>
+    </div>
+
+  </div><!-- .cert-inner -->
+  <?php endif; ?>
+
+</div><!-- .cert-page -->
 
 </body>
 </html>

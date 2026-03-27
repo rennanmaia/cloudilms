@@ -43,7 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $save->execute(['cert_body',          $certBody,    $certBody]);
         $save->execute(['cert_primary_color', $certPrimary, $certPrimary]);
         $save->execute(['cert_accent_color',  $certAccent,  $certAccent]);
+        $certBgImage = trim($_POST['cert_bg_image'] ?? '');
+        if ($certBgImage && !preg_match('/^https?:\/\//i', $certBgImage)) $certBgImage = '';
         $save->execute(['cert_footer',        $certFooter,  $certFooter]);
+        $save->execute(['cert_bg_image',      $certBgImage, $certBgImage]);
         // Teste de conexão
         if ($testFolder && $apiKey) {
             $gd = new GoogleDrive();
@@ -146,9 +149,9 @@ adminHeader('Configurações', 'settings');
       </div>
 
       <div class="form-group">
-        <label>Texto do corpo</label>
-        <textarea name="cert_body" rows="3" class="form-control"><?= htmlspecialchars($settings['cert_body'] ?? '{student_name} concluiu com êxito o curso {course_name}, com carga horária de {workload}.') ?></textarea>
-        <small class="help-text">Variáveis disponíveis: <code>{student_name}</code> <code>{course_name}</code> <code>{workload}</code> <code>{issued_date}</code> <code>{issuer}</code></small>
+        <label>Nota personalizada (opcional)</label>
+        <textarea name="cert_body" rows="2" class="form-control"><?= htmlspecialchars($settings['cert_body'] ?? '') ?></textarea>
+        <small class="help-text">Texto livre exibido no certificado. Deixe vazio para usar apenas o layout padrão.</small>
       </div>
 
       <div class="form-group">
@@ -171,6 +174,14 @@ adminHeader('Configurações', 'settings');
                  value="<?= htmlspecialchars($settings['cert_accent_color'] ?? '#c9a84c') ?>"
                  class="form-control" style="height:2.5rem;padding:.25rem">
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>Imagem de fundo (URL)</label>
+        <input type="url" name="cert_bg_image"
+               value="<?= htmlspecialchars($settings['cert_bg_image'] ?? '') ?>"
+               class="form-control" placeholder="https://exemplo.com/fundo.jpg">
+        <small class="help-text">URL pública de uma imagem (https://…). Uma camada semitransparente preserva a legibilidade do texto. Use imagens claras ou suaves.</small>
       </div>
 
       <button type="submit" class="btn btn-primary">💾 Salvar certificado</button>
