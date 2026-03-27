@@ -8,7 +8,7 @@ define('APP_NAME', 'CloudiLMS');
 define('APP_URL', 'http://localhost/cloudilms');
 define('APP_VERSION', '1.0.0');
 // Chave de criptografia AES-256 (32 bytes em hex). Nunca commitar em repositórios públicos.
-define('ENCRYPT_KEY', '388edc0cafbcab7966096da640f3378930fd81e41a7f2149a4a9f3069378e950');
+define('ENCRYPT_KEY', '');
 define('SESSION_LIFETIME', 3600 * 8);
 define('HASH_ALGO', PASSWORD_BCRYPT);
 
