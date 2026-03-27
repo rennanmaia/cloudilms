@@ -143,6 +143,14 @@ siteHeader($quiz['title'] . ' — ' . $course['title']);
     <?php endif; ?>
   </div>
 
+  <!-- Barra de progresso -->
+  <div class="quiz-progress-wrap">
+    <div class="quiz-progress-bar">
+      <div class="quiz-progress-fill" id="quizProgress" style="width:0%"></div>
+    </div>
+    <span class="quiz-progress-text" id="quizProgressText">0 / <?= count($quiz['questions']) ?> respondida(s)</span>
+  </div>
+
   <!-- Formulário de respostas -->
   <form method="post" action="quiz.php" class="quiz-form" id="quizForm">
     <input type="hidden" name="quiz_id" value="<?= $quizId ?>">
@@ -177,24 +185,33 @@ siteHeader($quiz['title'] . ' — ' . $course['title']);
 </div>
 
 <script>
+const TOTAL_QUESTIONS = <?= count($quiz['questions']) ?>;
+
+function updateProgress() {
+    const answered = document.querySelectorAll('input[type=radio]:checked').length;
+    const pct = TOTAL_QUESTIONS > 0 ? Math.round(answered / TOTAL_QUESTIONS * 100) : 0;
+    document.getElementById('quizProgress').style.width = pct + '%';
+    document.getElementById('quizProgressText').textContent = answered + ' / ' + TOTAL_QUESTIONS + ' respondida(s)';
+}
+
 // Confirmação antes de enviar
 document.getElementById('quizForm').addEventListener('submit', function(e) {
-    const questions = <?= count($quiz['questions']) ?>;
-    const answered  = document.querySelectorAll('input[type=radio]:checked').length;
-    if (answered < questions) {
-        const missing = questions - answered;
+    const answered = document.querySelectorAll('input[type=radio]:checked').length;
+    if (answered < TOTAL_QUESTIONS) {
+        const missing = TOTAL_QUESTIONS - answered;
         if (!confirm('Você ainda não respondeu ' + missing + ' questão(ões). Enviar mesmo assim?')) {
             e.preventDefault();
         }
     }
 });
 
-// Destaca opção selecionada visualmente
+// Destaca opção selecionada e atualiza progresso
 document.querySelectorAll('.quiz-option-label input[type=radio]').forEach(radio => {
     radio.addEventListener('change', function() {
         const group = this.closest('.quiz-options-group');
         group.querySelectorAll('.quiz-option-label').forEach(l => l.classList.remove('selected'));
         this.closest('.quiz-option-label').classList.add('selected');
+        updateProgress();
     });
 });
 </script>
