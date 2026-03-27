@@ -171,6 +171,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode('Aula removida.'));
                 exit;
 
+            case 'bulk_delete_lessons':
+                $ids = array_map('intval', (array)($_POST['lesson_ids'] ?? []));
+                $deleted = 0;
+                foreach (array_filter($ids) as $lid) {
+                    $model->deleteLesson($lid);
+                    $deleted++;
+                }
+                header("Location: courses.php?action=lessons&id={$id}&msg=" . urlencode("{$deleted} aula(s) excluída(s)."));
+                exit;
+
             case 'save_lesson':
                 $lessonId  = (int)($_POST['lesson_id'] ?? 0);
                 $courseId  = $id ?: (int)($_POST['course_id'] ?? 0);
@@ -675,9 +685,24 @@ if ($action === 'lessons') {
       <div class="lessons-panel">
         <div class="card">
           <div class="card-header">
-            <h2>▶ Aulas (<?= $totalLessons ?>)</h2>
-            <small style="color:#94a3b8">Arraste para reordenar dentro do tópico</small>
+            <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">
+              <h2>▶ Aulas (<?= $totalLessons ?>)</h2>
+              <?php if ($totalLessons > 0): ?>
+              <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;color:var(--text2);cursor:pointer;font-weight:normal">
+                <input type="checkbox" id="selectAllLessons" onchange="toggleSelectAll(this)">
+                Selecionar tudo
+              </label>
+              <?php endif; ?>
+            </div>
+            <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+              <?php if ($totalLessons > 0): ?>
+              <button type="button" id="bulkDeleteBtn" class="btn btn-sm btn-danger" style="display:none" onclick="submitBulkDelete()">🗑 Excluir selecionadas</button>
+              <?php endif; ?>
+              <small style="color:#94a3b8">Arraste para reordenar dentro do tópico</small>
+            </div>
           </div>
+          <form method="post" action="courses.php?action=bulk_delete_lessons&id=<?= $id ?>" id="bulkDeleteForm">
+            <input type="hidden" name="csrf" value="<?= $csrf ?>">
 
           <?php if ($totalLessons > 0): ?>
           <div class="grouped-lessons">
@@ -703,6 +728,7 @@ if ($action === 'lessons') {
               <ul class="lesson-list lesson-sublist" data-topic="<?= $topicData['id'] ?? '0' ?>">
                 <?php foreach ($groupLessons as $i => $l): ?>
                 <li class="lesson-item" data-id="<?= $l['id'] ?>">
+                  <input type="checkbox" class="lesson-bulk-cb" name="lesson_ids[]" value="<?= $l['id'] ?>" onchange="onCbChange()" style="flex-shrink:0;margin-right:.25rem;accent-color:var(--danger,#ef4444);cursor:pointer">
                   <span class="drag-handle">⠿</span>
                   <span class="lesson-num"><?= $i + 1 ?></span>
                   <div class="lesson-info">
@@ -858,6 +884,7 @@ if ($action === 'lessons') {
             <p>Clique em <strong>"Sincronizar aulas do Drive"</strong> para importar automaticamente.</p>
           </div>
           <?php endif; ?>
+          </form><!-- #bulkDeleteForm -->
         </div>
       </div>
     </div><!-- .lessons-layout -->
@@ -870,6 +897,27 @@ if ($action === 'lessons') {
     <script>
     const COURSE_ID = <?= $id ?>;
     const CSRF      = '<?= $csrf ?>';
+
+    // ── Seleção em massa ──────────────────────────────────────────────
+    function toggleSelectAll(master) {
+        document.querySelectorAll('.lesson-bulk-cb').forEach(cb => { cb.checked = master.checked; });
+        onCbChange();
+    }
+    function onCbChange() {
+        const total   = document.querySelectorAll('.lesson-bulk-cb').length;
+        const checked = document.querySelectorAll('.lesson-bulk-cb:checked').length;
+        const btn     = document.getElementById('bulkDeleteBtn');
+        const master  = document.getElementById('selectAllLessons');
+        if (btn)    btn.style.display = checked > 0 ? '' : 'none';
+        if (master) master.indeterminate = checked > 0 && checked < total;
+        if (master) master.checked = checked === total && total > 0;
+    }
+    function submitBulkDelete() {
+        const checked = document.querySelectorAll('.lesson-bulk-cb:checked').length;
+        if (!checked) return;
+        if (!confirm(`Excluir ${checked} aula(s) selecionada(s)? Esta ação não pode ser desfeita.`)) return;
+        document.getElementById('bulkDeleteForm').submit();
+    }
 
     // ── Atribuir tópico via AJAX ──────────────────────────────────────────
     function assignTopic(sel) {
