@@ -27,7 +27,12 @@ class GoogleDrive {
         // Formatos aceitos:
         // https://drive.google.com/drive/folders/FOLDER_ID
         // https://drive.google.com/drive/u/0/folders/FOLDER_ID
-        // https://drive.google.com/open?id=FOLDER_ID
+        // https://drive.google.com/file/d/FILE_ID/view  (vídeo/arquivo)
+        // https://drive.google.com/file/d/FILE_ID/preview
+        // https://drive.google.com/open?id=FILE_ID
+        if (preg_match('/\/file\/d\/([a-zA-Z0-9_-]+)/', $url, $m)) {
+            return $m[1];
+        }
         if (preg_match('/\/folders\/([a-zA-Z0-9_-]+)/', $url, $m)) {
             return $m[1];
         }

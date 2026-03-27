@@ -167,8 +167,8 @@ a:hover { color: var(--primary2); }
 .wl-index { font-size: .75rem; color: var(--text3); margin-top: .15rem; min-width: 1.25rem; }
 .wl-title { flex: 1; font-size: .9rem; }
 .wl-check { color: var(--text3); font-size: .875rem; }
-.watch-main  { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
-.video-container { flex: 1; background: #000; min-height: 0; }
+.watch-main  { flex: 1; display: flex; flex-direction: column; overflow-y: auto; min-width: 0; }
+.video-container { background: #000; aspect-ratio: 16/9; max-height: calc(100vh - 160px); width: 100%; flex-shrink: 0; }
 .video-container iframe { width: 100%; height: 100%; display: block; }
 .watch-controls {
   background: var(--bg2); border-top: 1px solid var(--bg3);
@@ -298,7 +298,7 @@ a:hover { color: var(--primary2); }
 .wl-lock { font-size: .8rem; margin-top: .1rem; }
 
 /* ── Bloqueador de seek (barra inferior do player) ── */
-.video-container { position: relative; flex: 1; background: #000; min-height: 0; }
+.video-container { position: relative; background: #000; aspect-ratio: 16/9; max-height: calc(100vh - 160px); width: 100%; flex-shrink: 0; }
 /* Mantido para compatibilidade, mas substituído por gdrive-controls-blocker */
 .seek-blocker {
   position: absolute;

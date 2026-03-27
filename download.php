@@ -23,10 +23,11 @@ if (!$att || empty($att['file_path'])) {
 }
 
 // ── Controle de acesso ───────────────────────────────────────────────────────
-$user = $auth->user();
-if ($user['role'] !== 'admin') {
+if ($auth->isAdmin()) {
+    // admins podem baixar qualquer arquivo
+} else {
     $lesson = $model->getLessonById((int)$att['lesson_id']);
-    if (!$lesson || !$model->isEnrolled((int)$user['id'], (int)$lesson['course_id'])) {
+    if (!$lesson || !$model->isEnrolled((int)$_SESSION['user_id'], (int)$lesson['course_id'])) {
         http_response_code(403);
         exit('Acesso não autorizado.');
     }
