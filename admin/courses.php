@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/course.php';
 require_once __DIR__ . '/../includes/googledrive.php';
+require_once __DIR__ . '/../includes/mediasource.php';
 require_once __DIR__ . '/layout.php';
 
 $auth = new Auth();
@@ -30,18 +31,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         switch ($action) {
             case 'save':
-                $folderUrl = trim($_POST['gdrive_folder_url'] ?? '');
-                $folderId  = GoogleDrive::extractFolderId($folderUrl);
-                if (!$folderId) {
-                    $error = 'URL/ID da pasta do Google Drive inválido.';
-                    break;
+                $sourceType = $_POST['source_type'] ?? 'gdrive';
+                if (!in_array($sourceType, ['gdrive','http','ftp','local'], true)) $sourceType = 'gdrive';
+
+                $gdriveFolder    = null;
+                $gdriveUrl       = null;
+                $sourceFolder    = null;
+
+                if ($sourceType === 'gdrive') {
+                    $folderUrl    = trim($_POST['gdrive_folder_url'] ?? '');
+                    $folderId     = GoogleDrive::extractFolderId($folderUrl);
+                    if (!$folderId) { $error = 'URL/ID da pasta do Google Drive inválido.'; break; }
+                    $gdriveFolder = $folderId;
+                    $gdriveUrl    = $folderUrl;
+                } else {
+                    $sourceFolder = trim($_POST['source_folder'] ?? '');
+                    if (!$sourceFolder) { $error = 'A referência da pasta/URL da fonte é obrigatória.'; break; }
                 }
+
                 $data = [
                     'title'               => trim($_POST['title'] ?? ''),
                     'description'         => trim($_POST['description'] ?? ''),
                     'thumbnail'           => trim($_POST['thumbnail'] ?? ''),
-                    'gdrive_folder_id'    => $folderId,
-                    'gdrive_folder_url'   => $folderUrl,
+                    'gdrive_folder_id'    => $gdriveFolder,
+                    'gdrive_folder_url'   => $gdriveUrl,
+                    'source_type'         => $sourceType,
+                    'source_folder'       => $sourceFolder,
                     'published'           => isset($_POST['published']) ? 1 : 0,
                     'extra_hours_minutes' => max(0, (int)($_POST['extra_hours_minutes'] ?? 0)),
                 ];
@@ -71,29 +86,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $course = $model->getCourseById($id);
                 if (!$course) { $error = 'Curso não encontrado.'; break; }
 
-                $allFiles   = $gdrive->getFolderFiles($course['gdrive_folder_id']);
-                $folders    = array_values(array_filter($allFiles, fn($f) => $f['mimeType'] === 'application/vnd.google-apps.folder'));
-                $rootVideos = array_values(array_filter($allFiles, fn($f) => str_starts_with($f['mimeType'] ?? '', 'video/')));
+                $srcType = $course['source_type'] ?? 'gdrive';
+                $db      = Database::getConnection();
+
+                try {
+                    $source = MediaSourceBase::make($srcType, $db);
+                } catch (\InvalidArgumentException $e) {
+                    $error  = 'Tipo de fonte inválido: ' . htmlspecialchars($srcType);
+                    $action = 'lessons';
+                    break;
+                }
+
+                // Determine folder reference
+                if ($srcType === 'gdrive') {
+                    $syncPath = $course['gdrive_folder_id'] ?? '';
+                } else {
+                    $syncPath = $course['source_folder'] ?? '';
+                }
+
+                if (!$syncPath) {
+                    $error  = 'Pasta/URL de fonte não configurada. Edite o curso e preencha a referência da fonte.';
+                    $action = 'lessons';
+                    break;
+                }
+
+                $allFiles   = $source->listFiles($syncPath);
+                $folders    = array_values(array_filter($allFiles, fn($f) =>  $f['isFolder']));
+                $rootVideos = array_values(array_filter($allFiles, fn($f) => !$f['isFolder']));
 
                 if (empty($allFiles)) {
-                    $error = 'Nenhum arquivo encontrado. Verifique se a pasta é pública e a API Key está configurada.';
+                    $error  = 'Nenhum arquivo de vídeo encontrado. Verifique a configuração da fonte e as permissões.';
                     $action = 'lessons';
                     break;
                 }
 
                 if (!empty($folders)) {
-                    // Subpastas detectadas → criar como tópicos
+                    // Sub-pastas → criar como tópicos
                     $subfolderData = [];
                     foreach ($folders as $folder) {
-                        $subFiles = $gdrive->getFolderFiles($folder['id']);
+                        $subFiles = $source->listFiles($folder['id']);
+                        // For HTTP JSON manifest: items may carry their own subfolder tag
+                        if (empty($subFiles)) {
+                            // Fallback: group root videos with matching subfolder field
+                            $subFiles = array_values(array_filter(
+                                $rootVideos,
+                                fn($f) => ($f['subfolder'] ?? null) === $folder['name']
+                            ));
+                        }
                         $subfolderData[$folder['name']] = $subFiles;
                     }
-                    $added = $model->syncLessonsWithTopics($id, $rootVideos, $subfolderData);
-                    $tf = count($folders);
-                    $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s). {$tf} subpasta(s) criadas como tópicos.";
+                    // Root videos that belong to a subfolder from JSON manifest
+                    $ungrouped = array_values(array_filter(
+                        $rootVideos,
+                        fn($f) => ($f['subfolder'] ?? null) === null
+                    ));
+                    $added    = $model->syncLessonsWithTopics($id, $ungrouped, $subfolderData, $srcType);
+                    $tf       = count($folders);
+                    $message  = "Sincronização concluída! {$added} nova(s) aula(s) importada(s). {$tf} subpasta(s) como tópicos.";
                 } else {
-                    $added = $model->syncLessons($id, $allFiles);
-                    $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s).";
+                    // Flat list – also handle JSON manifest subfolder grouping
+                    $withSub  = array_values(array_filter($rootVideos, fn($f) => ($f['subfolder'] ?? null) !== null));
+                    $noSub    = array_values(array_filter($rootVideos, fn($f) => ($f['subfolder'] ?? null) === null));
+
+                    if (!empty($withSub)) {
+                        $subfolderData = [];
+                        foreach ($withSub as $f) {
+                            $subfolderData[$f['subfolder']][] = $f;
+                        }
+                        $added   = $model->syncLessonsWithTopics($id, $noSub, $subfolderData, $srcType);
+                        $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s).";
+                    } else {
+                        $added   = $model->syncLessons($id, $allFiles, $srcType);
+                        $message = "Sincronização concluída! {$added} nova(s) aula(s) importada(s).";
+                    }
                 }
                 $action = 'lessons';
                 break;
@@ -182,31 +247,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
 
             case 'save_lesson':
-                $lessonId  = (int)($_POST['lesson_id'] ?? 0);
-                $courseId  = $id ?: (int)($_POST['course_id'] ?? 0);
-                $title     = trim($_POST['title'] ?? '');
-                $videoUrl  = trim($_POST['gdrive_video_url'] ?? '');
-                $bodyText  = trim($_POST['body_text'] ?? '');
-                $topicRaw  = $_POST['topic_id'] ?? '';
-                $topicId   = ($topicRaw === '' || $topicRaw === '0') ? null : (int)$topicRaw;
+                $lessonId   = (int)($_POST['lesson_id'] ?? 0);
+                $courseId   = $id ?: (int)($_POST['course_id'] ?? 0);
+                $title      = trim($_POST['title'] ?? '');
+                $bodyText   = trim($_POST['body_text'] ?? '');
+                $topicRaw   = $_POST['topic_id'] ?? '';
+                $topicId    = ($topicRaw === '' || $topicRaw === '0') ? null : (int)$topicRaw;
+                $srcType    = $_POST['video_source_type'] ?? 'gdrive';
+                if (!in_array($srcType, ['gdrive','http','ftp','local','none'], true)) $srcType = 'gdrive';
 
                 if (!$title) { $error = 'Título é obrigatório.'; $action = $lessonId ? 'edit_lesson' : 'new_lesson'; break; }
 
                 $gdriveFileId = null;
+                $videoUrl     = null;
                 $mimeType     = null;
-                if ($videoUrl !== '') {
-                    $extracted = GoogleDrive::extractFolderId($videoUrl);
-                    if (!$extracted) { $error = 'URL/ID do vídeo no Google Drive inválido.'; $action = $lessonId ? 'edit_lesson' : 'new_lesson'; break; }
-                    $gdriveFileId = $extracted;
-                    $mimeType     = 'video/mp4';
+
+                if ($srcType === 'gdrive') {
+                    $videoInput = trim($_POST['gdrive_video_url'] ?? '');
+                    if ($videoInput !== '') {
+                        $extracted = GoogleDrive::extractFolderId($videoInput);
+                        if (!$extracted) { $error = 'URL/ID do vídeo no Google Drive inválido.'; $action = $lessonId ? 'edit_lesson' : 'new_lesson'; break; }
+                        $gdriveFileId = $extracted;
+                        $mimeType     = 'video/mp4';
+                    }
+                } elseif ($srcType !== 'none') {
+                    $videoInput = trim($_POST['video_url'] ?? '');
+                    if ($videoInput !== '') {
+                        // Basic URL validation for http/ftp; local paths might not start with http
+                        $videoUrl = $videoInput;
+                        $mimeType = 'video/mp4';
+                    }
                 }
 
                 if ($lessonId) {
-                    $model->updateLesson($lessonId, $title, $gdriveFileId, $mimeType, $bodyText ?: null);
+                    $model->updateLesson($lessonId, $title, $gdriveFileId, $mimeType, $bodyText ?: null, $srcType === 'none' ? 'gdrive' : $srcType, $videoUrl);
                     $model->assignLessonToTopic($lessonId, $topicId);
                     header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$lessonId}&msg=" . urlencode('Aula atualizada.'));
                 } else {
-                    $newId = $model->createManualLesson($courseId, $topicId, $title, $gdriveFileId, $mimeType, $bodyText ?: null);
+                    $newId = $model->createManualLesson($courseId, $topicId, $title, $gdriveFileId, $mimeType, $bodyText ?: null, $srcType === 'none' ? 'gdrive' : $srcType, $videoUrl);
                     header("Location: courses.php?action=edit_lesson&id={$courseId}&lesson_id={$newId}&msg=" . urlencode('Aula criada.'));
                 }
                 exit;
@@ -288,7 +366,11 @@ if ($action === 'list') {
           <?php foreach ($courses as $c): ?>
           <tr>
             <td><strong><?= htmlspecialchars($c['title']) ?></strong><br>
-                <small style="color:#64748b"><?= htmlspecialchars($c['gdrive_folder_id']) ?></small></td>
+                <?php
+                  $srcLabels = ['gdrive'=>'🔵 Google Drive','http'=>'🌐 HTTP','ftp'=>'📡 FTP','local'=>'🖥️ Local'];
+                  $srcIcon   = $srcLabels[$c['source_type'] ?? 'gdrive'] ?? '🔵 Google Drive';
+                ?>
+                <small style="color:#64748b"><?= $srcIcon ?> &mdash; <?= htmlspecialchars($c['source_type'] === 'gdrive' ? ($c['gdrive_folder_id'] ?? '') : ($c['source_folder'] ?? '')) ?></small></td>
             <td><?= $c['lesson_count'] ?></td>
             <td><?= $c['student_count'] ?></td>
             <td><span class="badge <?= $c['published'] ? 'badge-success':'badge-warning' ?>"><?= $c['published'] ? 'Publicado':'Rascunho' ?></span></td>
@@ -338,14 +420,71 @@ if ($action === 'new' || $action === 'edit') {
             <textarea name="description" rows="4" class="form-control" placeholder="Descreva o curso..."><?= htmlspecialchars($course['description'] ?? '') ?></textarea>
           </div>
 
+          <hr style="border-color:#334155;margin:1.5rem 0">
+          <h3 style="color:#38bdf8;margin-bottom:1rem">📂 Fonte dos vídeos</h3>
+
+          <?php $curSrcType = $course['source_type'] ?? 'gdrive'; ?>
           <div class="form-group">
-            <label>URL da pasta no Google Drive *</label>
-            <input type="text" name="gdrive_folder_url"
-                   value="<?= htmlspecialchars($course['gdrive_folder_url'] ?? '') ?>"
-                   required class="form-control"
-                   placeholder="https://drive.google.com/drive/folders/XXXXX">
-            <small class="help-text">Cole a URL da pasta pública do Google Drive. A pasta deve estar com permissão "Qualquer pessoa com o link pode ver".</small>
+            <label>Tipo de fonte</label>
+            <select name="source_type" id="courseSourceType" class="form-control" onchange="onCourseSourceChange()">
+              <?php foreach (['gdrive' => '🔵 Google Drive', 'http' => '🌐 HTTP / URL direta', 'ftp' => '📡 FTP', 'local' => '🖥️ Sistema de arquivos local'] as $sv => $sl): ?>
+              <option value="<?= $sv ?>" <?= $curSrcType === $sv ? 'selected' : '' ?>><?= $sl ?></option>
+              <?php endforeach; ?>
+            </select>
           </div>
+
+          <!-- Google Drive -->
+          <div id="src-gdrive" class="src-fields" style="<?= $curSrcType !== 'gdrive' ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>URL da pasta no Google Drive</label>
+              <input type="text" name="gdrive_folder_url"
+                     value="<?= htmlspecialchars($course['gdrive_folder_url'] ?? '') ?>"
+                     class="form-control"
+                     placeholder="https://drive.google.com/drive/folders/XXXXX">
+              <small class="help-text">Cole a URL da pasta pública (permissão "Qualquer pessoa com o link pode ver").</small>
+            </div>
+          </div>
+
+          <!-- HTTP -->
+          <div id="src-http" class="src-fields" style="<?= $curSrcType !== 'http' ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>URL de índice / manifesto JSON</label>
+              <input type="text" name="source_folder" id="src_folder_http"
+                     value="<?= $curSrcType === 'http' ? htmlspecialchars($course['source_folder'] ?? '') : '' ?>"
+                     class="form-control"
+                     placeholder="https://servidor.com/videos/curso/ ou https://servidor.com/manifest.json">
+              <small class="help-text">
+                Aceita: <strong>Autoindex Apache/Nginx</strong> (links de arquivos), <strong>manifesto JSON</strong>
+                <code>[{"url":"...","name":"...","folder":"Tópico"}]</code>, ou URL direta de um único vídeo.
+              </small>
+            </div>
+          </div>
+
+          <!-- FTP -->
+          <div id="src-ftp" class="src-fields" style="<?= $curSrcType !== 'ftp' ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>Caminho FTP relativo</label>
+              <input type="text" name="source_folder" id="src_folder_ftp"
+                     value="<?= $curSrcType === 'ftp' ? htmlspecialchars($course['source_folder'] ?? '') : '' ?>"
+                     class="form-control"
+                     placeholder="cursos/python/">
+              <small class="help-text">Caminho relativo ao <em>Caminho base FTP</em> configurado nas Configurações. Use sub-pastas para criar tópicos.</small>
+            </div>
+          </div>
+
+          <!-- Local -->
+          <div id="src-local" class="src-fields" style="<?= $curSrcType !== 'local' ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>Subcaminho local relativo</label>
+              <input type="text" name="source_folder" id="src_folder_local"
+                     value="<?= $curSrcType === 'local' ? htmlspecialchars($course['source_folder'] ?? '') : '' ?>"
+                     class="form-control"
+                     placeholder="cursos/python/">
+              <small class="help-text">Subcaminho relativo ao <em>Caminho base local</em> configurado nas Configurações. Use sub-pastas para criar tópicos.</small>
+            </div>
+          </div>
+
+          <hr style="border-color:#334155;margin:1.5rem 0">
 
           <div class="form-group">
             <label>URL de thumbnail (opcional)</label>
@@ -373,6 +512,29 @@ if ($action === 'new' || $action === 'edit') {
         </form>
       </div>
     </div>
+
+    <script>
+    function onCourseSourceChange() {
+        const val = document.getElementById('courseSourceType').value;
+        document.querySelectorAll('.src-fields').forEach(d => d.style.display = 'none');
+        const el = document.getElementById('src-' + val);
+        if (el) el.style.display = '';
+        // sync the hidden source_folder field from whichever visible input has value
+        ['http','ftp','local'].forEach(t => {
+            const inp = document.getElementById('src_folder_' + t);
+            if (inp && t !== val) inp.removeAttribute('name');
+            if (inp && t === val) inp.setAttribute('name', 'source_folder');
+        });
+    }
+    // Fix name attributes on load
+    (function(){
+        const val = document.getElementById('courseSourceType').value;
+        ['http','ftp','local'].forEach(t => {
+            const inp = document.getElementById('src_folder_' + t);
+            if (inp) inp.setAttribute('name', t === val ? 'source_folder' : 'source_folder_' + t);
+        });
+    })();
+    </script>
     <?php
     adminFooter();
     exit;
@@ -432,12 +594,49 @@ if ($action === 'new_lesson' || $action === 'edit_lesson') {
           </div>
 
           <div class="form-group">
-            <label>Vídeo no Google Drive (opcional)</label>
-            <input type="text" name="gdrive_video_url" class="form-control"
-                   value="<?= htmlspecialchars(($lesson && $lesson['gdrive_file_id'] && !str_starts_with($lesson['gdrive_file_id'], 'manual_')) ? 'https://drive.google.com/file/d/' . $lesson['gdrive_file_id'] . '/view' : '') ?>"
-                   placeholder="Cole a URL do vídeo no Google Drive (ou deixe em branco)">
-            <small class="help-text">Ex: https://drive.google.com/file/d/XXXXX/view — Deixe em branco para aulas só com texto ou arquivos.</small>
+            <label>Fonte do vídeo</label>
+            <?php
+              $lessonSrcType = $lesson['video_source_type'] ?? ($lesson ? ($lesson['gdrive_file_id'] ? 'gdrive' : 'none') : ($course['source_type'] ?? 'gdrive'));
+              $lessonVideoUrl = $lesson['video_url'] ?? '';
+              $lessonGdriveVal = ($lesson && $lesson['gdrive_file_id'] && !str_starts_with($lesson['gdrive_file_id'], 'manual_'))
+                  ? 'https://drive.google.com/file/d/' . $lesson['gdrive_file_id'] . '/view'
+                  : '';
+            ?>
+            <select name="video_source_type" id="lessonSrcType" class="form-control" onchange="onLessonSrcChange()">
+              <option value="none" <?= $lessonSrcType === 'none' ? 'selected' : '' ?>>— Sem vídeo —</option>
+              <option value="gdrive" <?= $lessonSrcType === 'gdrive' ? 'selected' : '' ?>>🔵 Google Drive</option>
+              <option value="http"   <?= $lessonSrcType === 'http'   ? 'selected' : '' ?>>🌐 HTTP / URL direta</option>
+              <option value="ftp"    <?= $lessonSrcType === 'ftp'    ? 'selected' : '' ?>>📡 FTP (URL HTTP)</option>
+              <option value="local"  <?= $lessonSrcType === 'local'  ? 'selected' : '' ?>>🖥️ Arquivo local</option>
+            </select>
           </div>
+
+          <div id="lesson-src-gdrive" class="lesson-src-fields" style="<?= $lessonSrcType !== 'gdrive' ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>URL / ID do vídeo no Google Drive</label>
+              <input type="text" name="gdrive_video_url" id="lessonGdriveInput" class="form-control"
+                     value="<?= htmlspecialchars($lessonGdriveVal) ?>"
+                     placeholder="https://drive.google.com/file/d/XXXXX/view">
+            </div>
+          </div>
+
+          <div id="lesson-src-url" class="lesson-src-fields" style="<?= !in_array($lessonSrcType, ['http','ftp','local']) ? 'display:none' : '' ?>">
+            <div class="form-group">
+              <label>URL direta do vídeo</label>
+              <input type="text" name="video_url" id="lessonUrlInput" class="form-control"
+                     value="<?= htmlspecialchars($lessonVideoUrl) ?>"
+                     placeholder="https://servidor.com/videos/aula01.mp4">
+              <small class="help-text">URL completa e acessível do arquivo de vídeo (mp4, webm, etc.).</small>
+            </div>
+          </div>
+
+          <script>
+          function onLessonSrcChange(){
+            const val = document.getElementById('lessonSrcType').value;
+            document.getElementById('lesson-src-gdrive').style.display = val === 'gdrive' ? '' : 'none';
+            document.getElementById('lesson-src-url').style.display    = ['http','ftp','local'].includes(val) ? '' : 'none';
+          }
+          </script>
 
           <div class="form-group">
             <label>Texto / Conteúdo da aula</label>
@@ -615,21 +814,29 @@ if ($action === 'lessons') {
     <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
     <?php if ($message): ?><div class="alert alert-success"><?= $message ?></div><?php endif; ?>
 
-    <!-- Drive sync -->
+    <!-- Source sync card -->
     <div class="card mb-2">
       <div class="card-header">
+        <?php
+          $srcLabels2 = ['gdrive'=>'Google Drive','http'=>'HTTP / URL','ftp'=>'FTP','local'=>'Sistema local'];
+          $srcType2   = $course['source_type'] ?? 'gdrive';
+          $srcLabel2  = $srcLabels2[$srcType2] ?? $srcType2;
+          $srcRef     = $srcType2 === 'gdrive' ? ($course['gdrive_folder_id'] ?? '') : ($course['source_folder'] ?? '');
+        ?>
         <div>
-          <h2>Pasta Google Drive</h2>
-          <small style="color:#94a3b8">ID: <?= htmlspecialchars($course['gdrive_folder_id']) ?> &mdash;
-            Se a pasta tiver <strong>subpastas</strong>, elas serão criadas automaticamente como tópicos.</small>
+          <h2>📂 Fonte: <?= htmlspecialchars($srcLabel2) ?></h2>
+          <small style="color:#94a3b8"><?= htmlspecialchars($srcRef) ?> &mdash;
+            Se a fonte tiver <strong>subpastas</strong>, elas serão criadas automaticamente como tópicos.</small>
         </div>
         <div style="display:flex;gap:.75rem;align-items:center">
           <a href="quizzes.php?course_id=<?= $id ?>" class="btn btn-sm btn-secondary">📝 Questionários</a>
           <a href="courses.php?action=new_lesson&id=<?= $id ?>" class="btn btn-sm btn-primary">+ Nova aula</a>
+          <?php if ($srcType2 === 'gdrive' && !empty($course['gdrive_folder_url'])): ?>
           <a href="<?= htmlspecialchars($course['gdrive_folder_url']) ?>" target="_blank" class="btn btn-sm btn-secondary">🔗 Abrir no Drive</a>
+          <?php endif; ?>
           <form method="post" action="courses.php?action=sync&id=<?= $id ?>">
             <input type="hidden" name="csrf" value="<?= $csrf ?>">
-            <button class="btn btn-primary">🔄 Sincronizar aulas do Drive</button>
+            <button class="btn btn-primary">🔄 Sincronizar aulas</button>
           </form>
         </div>
       </div>

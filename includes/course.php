@@ -38,16 +38,24 @@ class CourseModel {
 
     public function createCourse(array $data): int {
         $stmt = $this->db->prepare(
-            'INSERT INTO courses (title, slug, description, thumbnail, gdrive_folder_id, gdrive_folder_url, published, created_at)
-             VALUES (:title, :slug, :description, :thumbnail, :gdrive_folder_id, :gdrive_folder_url, :published, NOW())'
+            'INSERT INTO courses (title, slug, description, thumbnail,
+                                  gdrive_folder_id, gdrive_folder_url,
+                                  source_type, source_folder,
+                                  published, created_at)
+             VALUES (:title, :slug, :description, :thumbnail,
+                    :gdrive_folder_id, :gdrive_folder_url,
+                    :source_type, :source_folder,
+                    :published, NOW())'
         );
         $stmt->execute([
             ':title'             => $data['title'],
             ':slug'              => $this->makeSlug($data['title']),
             ':description'       => $data['description'] ?? '',
             ':thumbnail'         => $data['thumbnail'] ?? '',
-            ':gdrive_folder_id'  => $data['gdrive_folder_id'],
-            ':gdrive_folder_url' => $data['gdrive_folder_url'],
+            ':gdrive_folder_id'  => $data['gdrive_folder_id'] ?? null,
+            ':gdrive_folder_url' => $data['gdrive_folder_url'] ?? null,
+            ':source_type'       => $data['source_type'] ?? 'gdrive',
+            ':source_folder'     => $data['source_folder'] ?? null,
             ':published'         => (int)($data['published'] ?? 0),
         ]);
         return (int)$this->db->lastInsertId();
@@ -57,14 +65,17 @@ class CourseModel {
         $stmt = $this->db->prepare(
             'UPDATE courses SET title=:title, description=:description, thumbnail=:thumbnail,
              gdrive_folder_id=:gdrive_folder_id, gdrive_folder_url=:gdrive_folder_url,
+             source_type=:source_type, source_folder=:source_folder,
              published=:published, extra_hours_minutes=:extra_hours_minutes WHERE id=:id'
         );
         return $stmt->execute([
             ':title'               => $data['title'],
             ':description'         => $data['description'] ?? '',
             ':thumbnail'           => $data['thumbnail'] ?? '',
-            ':gdrive_folder_id'    => $data['gdrive_folder_id'],
-            ':gdrive_folder_url'   => $data['gdrive_folder_url'],
+            ':gdrive_folder_id'    => $data['gdrive_folder_id'] ?? null,
+            ':gdrive_folder_url'   => $data['gdrive_folder_url'] ?? null,
+            ':source_type'         => $data['source_type'] ?? 'gdrive',
+            ':source_folder'       => $data['source_folder'] ?? null,
             ':published'           => (int)($data['published'] ?? 0),
             ':extra_hours_minutes' => (int)($data['extra_hours_minutes'] ?? 0),
             ':id'                  => $id,
@@ -165,10 +176,10 @@ class CourseModel {
         return $stmt->fetch() ?: null;
     }
 
-    public function syncLessons(int $courseId, array $driveFiles): int {
+    public function syncLessons(int $courseId, array $files, string $sourceType = 'gdrive'): int {
         $added = 0;
-        foreach ($driveFiles as $file) {
-            $added += $this->insertLesson($courseId, null, $file);
+        foreach ($files as $file) {
+            $added += $this->insertLesson($courseId, null, $file, $sourceType);
         }
         return $added;
     }
@@ -176,14 +187,15 @@ class CourseModel {
     /**
      * Sincroniza aulas detectando subpastas como tópicos.
      * $rootVideos   = vídeos na raiz da pasta principal
-     * $subfolderData = ['Nome da Pasta' => [array de arquivos Drive], ...]
+     * $subfolderData = ['Nome da Pasta' => [array de arquivos], ...]
+     * $sourceType   = 'gdrive' | 'http' | 'ftp' | 'local'
      */
-    public function syncLessonsWithTopics(int $courseId, array $rootVideos, array $subfolderData): int {
+    public function syncLessonsWithTopics(int $courseId, array $rootVideos, array $subfolderData, string $sourceType = 'gdrive'): int {
         $added = 0;
 
         // Vídeos na raiz → sem tópico
         foreach ($rootVideos as $file) {
-            $added += $this->insertLesson($courseId, null, $file);
+            $added += $this->insertLesson($courseId, null, $file, $sourceType);
         }
 
         // Tópicos existentes indexados por nome
@@ -203,24 +215,38 @@ class CourseModel {
                 $topicId = $topicsByName[$nameKey];
             }
             foreach ((array)$files as $file) {
-                $added += $this->insertLesson($courseId, $topicId, $file);
+                $added += $this->insertLesson($courseId, $topicId, $file, $sourceType);
             }
         }
 
         return $added;
     }
 
-    /** Insere uma única aula (sem duplicar). Retorna 1 se inserida, 0 se já existia. */
-    private function insertLesson(int $courseId, ?int $topicId, array $file): int {
+    /**
+     * Insere uma única aula (sem duplicar). Retorna 1 se inserida, 0 se já existia.
+     * $sourceType: 'gdrive' | 'http' | 'ftp' | 'local'
+     * Para gdrive, $file['id'] = Drive file ID.
+     * Para outros, $file['id'] = URL HTTP completa do vídeo.
+     */
+    private function insertLesson(int $courseId, ?int $topicId, array $file, string $sourceType = 'gdrive'): int {
         $mime = $file['mimeType'] ?? '';
         if (!str_starts_with($mime, 'video/')) return 0;
 
-        $check = $this->db->prepare('SELECT 1 FROM lessons WHERE course_id = ? AND gdrive_file_id = ?');
-        $check->execute([$courseId, $file['id']]);
+        // Deduplicate: check by source-specific identifier
+        if ($sourceType === 'gdrive') {
+            $check = $this->db->prepare('SELECT 1 FROM lessons WHERE course_id = ? AND gdrive_file_id = ?');
+            $check->execute([$courseId, $file['id']]);
+        } else {
+            $check = $this->db->prepare('SELECT 1 FROM lessons WHERE course_id = ? AND video_url = ?');
+            $check->execute([$courseId, $file['id']]);
+        }
         if ($check->fetch()) return 0;
 
-        $duration = null;
-        if (!empty($file['videoMediaMetadata']['durationMillis'])) {
+        $gdriveFileId = ($sourceType === 'gdrive') ? $file['id'] : null;
+        $videoUrl     = ($sourceType !== 'gdrive') ? $file['id'] : null;
+
+        $duration = $file['duration'] ?? null;
+        if ($gdriveFileId && $duration === null && !empty($file['videoMediaMetadata']['durationMillis'])) {
             $duration = (int)round($file['videoMediaMetadata']['durationMillis'] / 1000);
         }
 
@@ -235,16 +261,18 @@ class CourseModel {
         $maxOrder = (int)$stmtMax->fetchColumn();
 
         $this->db->prepare(
-            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, mime_type, duration_seconds, sort_order, created_at)
-             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :mime_type, :duration_seconds, :sort_order, NOW())'
+            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, video_source_type, video_url, mime_type, duration_seconds, sort_order, created_at)
+             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :video_source_type, :video_url, :mime_type, :duration_seconds, :sort_order, NOW())'
         )->execute([
-            ':course_id'        => $courseId,
-            ':topic_id'         => $topicId,
-            ':title'            => $this->cleanTitle($file['name']),
-            ':gdrive_file_id'   => $file['id'],
-            ':mime_type'        => $mime,
-            ':duration_seconds' => $duration,
-            ':sort_order'       => $maxOrder + 1,
+            ':course_id'          => $courseId,
+            ':topic_id'           => $topicId,
+            ':title'              => $this->cleanTitle($file['name']),
+            ':gdrive_file_id'     => $gdriveFileId,
+            ':video_source_type'  => $sourceType,
+            ':video_url'          => $videoUrl,
+            ':mime_type'          => $mime,
+            ':duration_seconds'   => $duration,
+            ':sort_order'         => $maxOrder + 1,
         ]);
         return 1;
     }
@@ -277,10 +305,16 @@ class CourseModel {
     }
 
     /**
-     * Cria uma aula avulsa (não sincronizada pelo Drive).
-     * @param ?string $gdriveFileId  ID do vídeo no Drive, ou null se não há vídeo.
+     * Cria uma aula avulsa.
+     * @param ?string $gdriveFileId  ID do vídeo no Google Drive, ou null.
+     * @param ?string $videoUrl      URL direta do vídeo (http/ftp/local), ou null.
+     * @param string  $sourceType    'gdrive' | 'http' | 'ftp' | 'local'
      */
-    public function createManualLesson(int $courseId, ?int $topicId, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $bodyText): int {
+    public function createManualLesson(
+        int $courseId, ?int $topicId, string $title,
+        ?string $gdriveFileId, ?string $mimeType, ?string $bodyText,
+        string $sourceType = 'gdrive', ?string $videoUrl = null
+    ): int {
         if ($topicId !== null) {
             $stmtMax = $this->db->prepare('SELECT COALESCE(MAX(sort_order), 0) FROM lessons WHERE course_id = ? AND topic_id = ?');
             $stmtMax->execute([$courseId, $topicId]);
@@ -291,32 +325,45 @@ class CourseModel {
         $maxOrder = (int)$stmtMax->fetchColumn();
 
         $this->db->prepare(
-            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, mime_type, sort_order, body_text, created_at)
-             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :mime_type, :sort_order, :body_text, NOW())'
+            'INSERT INTO lessons (course_id, topic_id, title, gdrive_file_id, video_source_type, video_url, mime_type, sort_order, body_text, created_at)
+             VALUES (:course_id, :topic_id, :title, :gdrive_file_id, :video_source_type, :video_url, :mime_type, :sort_order, :body_text, NOW())'
         )->execute([
-            ':course_id'      => $courseId,
-            ':topic_id'       => $topicId,
-            ':title'          => $title,
-            ':gdrive_file_id' => $gdriveFileId ?: null,
-            ':mime_type'      => $mimeType ?: null,
-            ':sort_order'     => $maxOrder + 1,
-            ':body_text'      => $bodyText ?: null,
+            ':course_id'         => $courseId,
+            ':topic_id'          => $topicId,
+            ':title'             => $title,
+            ':gdrive_file_id'    => $gdriveFileId ?: null,
+            ':video_source_type' => $sourceType,
+            ':video_url'         => $videoUrl ?: null,
+            ':mime_type'         => $mimeType ?: null,
+            ':sort_order'        => $maxOrder + 1,
+            ':body_text'         => $bodyText ?: null,
         ]);
         return (int)$this->db->lastInsertId();
     }
 
     /**
-     * Atualiza os campos editáveis de uma aula (avulsa ou sincronizada).
+     * Atualiza os campos editáveis de uma aula.
+     * @param string  $sourceType    'gdrive' | 'http' | 'ftp' | 'local'
+     * @param ?string $videoUrl      URL direta (non-gdrive), ou null.
      */
-    public function updateLesson(int $id, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $bodyText): void {
+    public function updateLesson(
+        int $id, string $title, ?string $gdriveFileId, ?string $mimeType, ?string $bodyText,
+        string $sourceType = 'gdrive', ?string $videoUrl = null
+    ): void {
         $this->db->prepare(
-            'UPDATE lessons SET title = :title, gdrive_file_id = :gdrive_file_id, mime_type = :mime_type, body_text = :body_text WHERE id = :id'
+            'UPDATE lessons
+             SET title = :title, gdrive_file_id = :gdrive_file_id,
+                 video_source_type = :video_source_type, video_url = :video_url,
+                 mime_type = :mime_type, body_text = :body_text
+             WHERE id = :id'
         )->execute([
-            ':title'          => $title,
-            ':gdrive_file_id' => $gdriveFileId ?: null,
-            ':mime_type'      => $mimeType ?: null,
-            ':body_text'      => $bodyText ?: null,
-            ':id'             => $id,
+            ':title'             => $title,
+            ':gdrive_file_id'    => $gdriveFileId ?: null,
+            ':video_source_type' => $sourceType,
+            ':video_url'         => $videoUrl ?: null,
+            ':mime_type'         => $mimeType ?: null,
+            ':body_text'         => $bodyText ?: null,
+            ':id'                => $id,
         ]);
     }
 

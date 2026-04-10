@@ -20,7 +20,8 @@ class ActivityLog {
      *   user_id, entity_type, entity_id, entity_title, page_url, meta (array)
      */
     public static function record(string $action, array $opts = []): int {
-        $userId    = $opts['user_id'] ?? (isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null);
+        $rawUserId = $opts['user_id'] ?? ($_SESSION['user_id'] ?? null);
+        $userId    = ($rawUserId !== null && (int)$rawUserId > 0) ? (int)$rawUserId : null;
         $sessionId = session_id() ?: null;
         $ip        = self::getIp();
         $ua        = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 350);
@@ -32,7 +33,7 @@ class ActivityLog {
              (user_id, session_id, action, entity_type, entity_id, entity_title, page_url, ip, user_agent, meta, created_at)
              VALUES (?,?,?,?,?,?,?,?,?,?, NOW())'
         );
-        $stmt->execute([
+        $params = [
             $userId,
             $sessionId,
             $action,
@@ -43,7 +44,18 @@ class ActivityLog {
             $ip,
             $ua,
             $meta,
-        ]);
+        ];
+        try {
+            $stmt->execute($params);
+        } catch (PDOException $e) {
+            // FK violation: user_id references a deleted user — retry with NULL
+            if (str_contains($e->getCode(), '23000') || str_contains($e->getMessage(), '1452')) {
+                $params[0] = null;
+                $stmt->execute($params);
+            } else {
+                throw $e;
+            }
+        }
         return (int)self::db()->lastInsertId();
     }
 

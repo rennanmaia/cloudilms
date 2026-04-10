@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# CloudiLMS — Serviço systemd para o monitor de vídeos
+#
+# INSTALAÇÃO:
+#   1. Edite os caminhos abaixo (WorkingDirectory, ExecStart, User)
+#   2. Copie para /etc/systemd/system/:
+#        sudo cp cloudilms-video-watcher.service /etc/systemd/system/
+#   3. Ative e inicie:
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable cloudilms-video-watcher
+#        sudo systemctl start  cloudilms-video-watcher
+#   4. Verifique:
+#        sudo systemctl status cloudilms-video-watcher
+#        sudo journalctl -u cloudilms-video-watcher -f
+# ═══════════════════════════════════════════════════════════════════════════════
+
+[Unit]
+Description=CloudiLMS Video Manifest Watcher
+Documentation=https://github.com/seuusuario/cloudilms
+After=network.target
+
+[Service]
+Type=simple
+
+# ── mk-auth roda geralmente como root ──────────────────────────────────────────
+User=root
+Group=root
+
+# ── Caminho da pasta de vídeos no mk-auth ───────────────────────────────────
+WorkingDirectory=/opt/mk-auth/admin/cursos
+ExecStart=/bin/bash /opt/mk-auth/admin/cursos/watch_videos.sh
+
+# Variáveis de ambiente (opcional — sobrescreve as do script)
+# Environment=PHP_BIN=/usr/bin/php8.2
+# Environment=DEBOUNCE=5
+
+# ── Reinício automático em caso de falha ──────────────────────────────────────
+Restart=always
+RestartSec=10
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cloudilms-video-watcher
+
+# ── Limites de inotify (caso haja muitos arquivos) ────────────────────────────
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

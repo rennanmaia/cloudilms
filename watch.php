@@ -204,8 +204,19 @@ $currentIndex = array_search($lessonId, array_column($lessons, 'id'));
 $prevLesson   = $currentIndex > 0 ? $lessons[$currentIndex - 1] : null;
 $nextLesson   = $currentIndex < count($lessons) - 1 ? $lessons[$currentIndex + 1] : null;
 
-$hasVideo = !empty($lesson['gdrive_file_id']);
-$embedUrl = $hasVideo ? GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']) : '';
+$srcType  = $lesson['video_source_type'] ?? 'gdrive';
+$useIframe = ($srcType === 'gdrive');
+
+if ($srcType === 'gdrive' && !empty($lesson['gdrive_file_id'])) {
+    $hasVideo = true;
+    $videoSrc = GoogleDrive::getEmbedUrl($lesson['gdrive_file_id']);
+} elseif ($srcType !== 'gdrive' && !empty($lesson['video_url'])) {
+    $hasVideo = true;
+    $videoSrc = $lesson['video_url'];
+} else {
+    $hasVideo = false;
+    $videoSrc = '';
+}
 $attachments = $model->getAttachmentsByLesson($lessonId);
 $pct = count($lessons) ? round(count($progress) / count($lessons) * 100) : 0;
 
@@ -329,8 +340,9 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
   <div class="watch-main">
     <?php if ($hasVideo): ?>
     <div class="video-container" id="videoContainer">
+      <?php if ($useIframe): ?>
       <iframe id="lessonIframe"
-              src="<?= htmlspecialchars($embedUrl) ?>"
+              src="<?= htmlspecialchars($videoSrc) ?>"
               width="100%" height="100%"
               frameborder="0"
               allow="autoplay"
@@ -341,6 +353,16 @@ siteHeader($lesson['title'] . ' - ' . $course['title']);
       <div class="gdrive-link-blocker"></div>
       <!-- Cobre toda a barra de controles inferior do Drive (progresso + play + volume) -->
       <div id="seekBlocker" class="gdrive-controls-blocker"></div>
+      <?php else: ?>
+      <video id="lessonVideo"
+             src="<?= htmlspecialchars($videoSrc) ?>"
+             width="100%" height="100%"
+             controls
+             preload="metadata"
+             controlslist="nodownload"
+             style="background:#000;display:block"
+      ></video>
+      <?php endif; ?>
     </div>
     <?php endif; ?>
     <div class="watch-controls">
@@ -461,8 +483,9 @@ const APP_BASE        = '<?= APP_URL ?>';
 
 /* ── Referências DOM ─────────────────────────────────── */
 const iframe    = document.getElementById('lessonIframe');
+const videoEl   = document.getElementById('lessonVideo');
 const markBtn   = document.getElementById('markBtn');
-const blocker   = document.getElementById('seekBlocker'); // pode ser null
+const blocker   = document.getElementById('seekBlocker'); // pode ser null (apenas gdrive)
 
 const iframeSrc = iframe ? iframe.src : '';
 
@@ -512,28 +535,58 @@ function autoMarkComplete() {
     }
 }
 
+/* ── HTML5 <video> — prevent seek + track time ───────── */
+if (videoEl) {
+    let lastValidTime = 0;
+
+    videoEl.addEventListener('play', () => { startTicker(); });
+    videoEl.addEventListener('pause', () => { stopTicker(); });
+    videoEl.addEventListener('ended', () => { stopTicker(); autoMarkComplete(); });
+
+    if (PREVENT_SEEK) {
+        videoEl.addEventListener('seeking', () => {
+            // Only allow seeking backward to already-watched portion
+            const allowed = (activeSeconds / (videoEl.duration || 1)) * videoEl.duration;
+            if (videoEl.currentTime > allowed + 2) {
+                videoEl.currentTime = lastValidTime;
+            }
+        });
+        videoEl.addEventListener('timeupdate', () => {
+            if (!videoEl.seeking) {
+                lastValidTime = videoEl.currentTime;
+            }
+        });
+    }
+}
+
 /* ── Pausar quando tela/aba ficar inativa ────────────── */
 function pauseVideo() {
-    if (paused || !iframe) return;
+    if (paused) return;
     paused = true;
     stopTicker();
-    // Tenta pausar via postMessage (Google Drive player)
-    try {
-        iframe.contentWindow.postMessage('{"action":"pauseVideo"}', 'https://drive.google.com');
-    } catch (_) {}
-    // Fallback: remove src para garantir que o áudio também pare
-    iframe.dataset.src = iframe.src;
-    iframe.src = '';
+    if (iframe) {
+        // Tenta pausar via postMessage (Google Drive player)
+        try {
+            iframe.contentWindow.postMessage('{"action":"pauseVideo"}', 'https://drive.google.com');
+        } catch (_) {}
+        // Fallback: remove src para garantir que o áudio também pare
+        iframe.dataset.src = iframe.src;
+        iframe.src = '';
+    }
+    if (videoEl && !videoEl.paused) {
+        videoEl.pause();
+    }
 }
 
 function resumeVideo() {
-    if (!paused || !iframe) return;
+    if (!paused) return;
     paused = false;
-    if (iframe.dataset.src) {
+    if (iframe && iframe.dataset.src) {
         iframe.src = iframe.dataset.src;
         delete iframe.dataset.src;
+        setTimeout(startTicker, 800); // aguarda iframe recarregar antes de contar
     }
-    setTimeout(startTicker, 800); // aguarda iframe recarregar antes de contar
+    // HTML5 video resumes automatically / user re-clicks play
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -545,7 +598,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* ── Inicializa o ticker ao carregar ─────────────────── */
-if (!markedComplete) {
+// For iframe (Google Drive) we start immediately since load event is unreliable cross-origin.
+// For HTML5 video, the play/pause events handle start/stop.
+if (!markedComplete && iframe) {
     startTicker();
 }
 

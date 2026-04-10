@@ -116,6 +116,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $message = 'Configurações de e-mail salvas com sucesso.';
             }
+
+        } elseif ($section === 'ftp') {
+            $ftpHost     = trim($_POST['ftp_host']      ?? '');
+            $ftpPort     = max(1, min(65535, (int)($_POST['ftp_port'] ?? 21)));
+            $ftpUser     = trim($_POST['ftp_user']      ?? '');
+            $ftpPass     = $_POST['ftp_pass']           ?? '';
+            $ftpBasePath = trim($_POST['ftp_base_path'] ?? '/');
+            $ftpBaseUrl  = rtrim(trim($_POST['ftp_base_url'] ?? ''), '/');
+
+            $save->execute(['ftp_host',      $ftpHost,               $ftpHost]);
+            $save->execute(['ftp_port',      (string)$ftpPort,       (string)$ftpPort]);
+            $save->execute(['ftp_user',      $ftpUser,               $ftpUser]);
+            $save->execute(['ftp_base_path', $ftpBasePath,           $ftpBasePath]);
+            $save->execute(['ftp_base_url',  $ftpBaseUrl,            $ftpBaseUrl]);
+
+            if ($ftpPass !== '' && $ftpPass !== '••••••••') {
+                $enc = encryptValue($ftpPass);
+                $save->execute(['ftp_pass', $enc, $enc]);
+            }
+            $message = 'Configurações FTP salvas com sucesso.';
+
+        } elseif ($section === 'http_src') {
+            $httpBaseUrl = rtrim(trim($_POST['http_base_url'] ?? ''), '/');
+            $save->execute(['http_base_url', $httpBaseUrl, $httpBaseUrl]);
+            $message = 'Configurações HTTP salvas com sucesso.';
+
+        } elseif ($section === 'local') {
+            $localBasePath = rtrim(trim($_POST['local_base_path'] ?? ''), '/\\');
+            $localBaseUrl  = rtrim(trim($_POST['local_base_url']  ?? ''), '/');
+            $save->execute(['local_base_path', $localBasePath, $localBasePath]);
+            $save->execute(['local_base_url',  $localBaseUrl,  $localBaseUrl]);
+            $message = 'Configurações de arquivo local salvas com sucesso.';
         }
     }
 }
@@ -329,6 +361,138 @@ adminHeader('Configurações', 'settings');
       <div style="margin-top:1.25rem">
         <button type="submit" class="btn btn-primary">💾 Salvar configurações de e-mail</button>
       </div>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     FTP
+     ════════════════════════════════════════════════════ -->
+<div class="card">
+  <div class="card-header"><h2>📡 Fonte de vídeos via FTP</h2></div>
+  <div class="card-body">
+    <p style="color:#94a3b8;margin-bottom:1.25rem">
+      O servidor PHP lista os arquivos via FTP e os serve via HTTP usando a URL base configurada.
+      Os alunos nunca acessam o FTP diretamente.
+    </p>
+    <form method="post" action="settings.php?action=save">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="section" value="ftp">
+
+      <div style="display:grid;grid-template-columns:1fr auto;gap:1rem;align-items:end">
+        <div class="form-group" style="margin:0">
+          <label>Host FTP</label>
+          <input type="text" name="ftp_host"
+                 value="<?= htmlspecialchars($settings['ftp_host'] ?? '') ?>"
+                 class="form-control" placeholder="ftp.seuservidor.com">
+        </div>
+        <div class="form-group" style="margin:0;width:110px">
+          <label>Porta</label>
+          <input type="number" name="ftp_port" min="1" max="65535"
+                 value="<?= (int)($settings['ftp_port'] ?? 21) ?>"
+                 class="form-control">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem">
+        <div class="form-group">
+          <label>Usuário FTP</label>
+          <input type="text" name="ftp_user"
+                 value="<?= htmlspecialchars($settings['ftp_user'] ?? '') ?>"
+                 class="form-control" placeholder="usuario_ftp" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label>Senha FTP</label>
+          <input type="password" name="ftp_pass"
+                 value="<?= ($settings['ftp_pass'] ?? '') !== '' ? '••••••••' : '' ?>"
+                 class="form-control" placeholder="••••••••" autocomplete="new-password">
+          <small class="help-text">Deixe em branco para manter. Armazenada criptografada.</small>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Caminho base FTP</label>
+        <input type="text" name="ftp_base_path"
+               value="<?= htmlspecialchars($settings['ftp_base_path'] ?? '/') ?>"
+               class="form-control" placeholder="/public_html/videos">
+        <small class="help-text">Diretório raiz no servidor FTP para os vídeos dos cursos.</small>
+      </div>
+
+      <div class="form-group">
+        <label>URL base HTTP</label>
+        <input type="text" name="ftp_base_url"
+               value="<?= htmlspecialchars($settings['ftp_base_url'] ?? '') ?>"
+               class="form-control" placeholder="https://cdn.seuservidor.com/videos">
+        <small class="help-text">URL pública correspondente ao caminho base acima. Usada para reproduzir os vídeos no navegador.</small>
+      </div>
+
+      <button type="submit" class="btn btn-primary">💾 Salvar configurações FTP</button>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     HTTP
+     ════════════════════════════════════════════════════ -->
+<div class="card">
+  <div class="card-header"><h2>🌐 Fonte de vídeos via HTTP</h2></div>
+  <div class="card-body">
+    <p style="color:#94a3b8;margin-bottom:1.25rem">
+      Importa vídeos diretamente de um servidor HTTP: autoindex Apache/Nginx, manifesto JSON, ou URL única.
+      Não requer credenciais; o servidor web deve permitir acesso público aos arquivos.
+    </p>
+    <form method="post" action="settings.php?action=save">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="section" value="http_src">
+
+      <div class="form-group">
+        <label>URL base HTTP (opcional)</label>
+        <input type="text" name="http_base_url"
+               value="<?= htmlspecialchars($settings['http_base_url'] ?? '') ?>"
+               class="form-control" placeholder="https://cdn.seuservidor.com/videos">
+        <small class="help-text">
+          Prefixo opcional para construir URLs relativas. Deixe em branco para usar URLs absolutas em cada curso.
+          <br>Formatos suportados por curso: <strong>autoindex</strong>, <strong>manifesto JSON</strong>
+          <code>[{"url":"…","name":"…","folder":"Tópico"}]</code>, ou uma <strong>URL de vídeo única</strong>.
+        </small>
+      </div>
+
+      <button type="submit" class="btn btn-primary">💾 Salvar configurações HTTP</button>
+    </form>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════
+     Local filesystem
+     ════════════════════════════════════════════════════ -->
+<div class="card">
+  <div class="card-header"><h2>🖥️ Fonte de vídeos via sistema de arquivos local</h2></div>
+  <div class="card-body">
+    <p style="color:#94a3b8;margin-bottom:1.25rem">
+      Importa vídeos de um diretório no servidor onde o PHP está rodando.
+      Os arquivos são servidos pela URL base configurada (ex: via web server ou CDN local).
+    </p>
+    <form method="post" action="settings.php?action=save">
+      <input type="hidden" name="csrf" value="<?= $csrf ?>">
+      <input type="hidden" name="section" value="local">
+
+      <div class="form-group">
+        <label>Caminho base no servidor</label>
+        <input type="text" name="local_base_path"
+               value="<?= htmlspecialchars($settings['local_base_path'] ?? '') ?>"
+               class="form-control" placeholder="/var/www/videos ou C:\videos">
+        <small class="help-text">Caminho absoluto no sistema de arquivos do servidor onde os vídeos estão armazenados.</small>
+      </div>
+
+      <div class="form-group">
+        <label>URL base pública</label>
+        <input type="text" name="local_base_url"
+               value="<?= htmlspecialchars($settings['local_base_url'] ?? '') ?>"
+               class="form-control" placeholder="https://seusite.com/videos">
+        <small class="help-text">URL pública correspondente ao caminho base. Usada para reproduzir os vídeos no navegador.</small>
+      </div>
+
+      <button type="submit" class="btn btn-primary">💾 Salvar configurações de arquivo local</button>
     </form>
   </div>
 </div>
