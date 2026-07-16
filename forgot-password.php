@@ -100,7 +100,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 HTML;
 
                 $mailer = new Mailer();
-                $mailer->send($email, 'Redefinição de senha – ' . $siteName, $html);
+                $emailOk = $mailer->send($email, 'Redefinição de senha – ' . $siteName, $html);
+                // Em modo debug, guardamos o link para exibir na página
+                if (APP_DEBUG) {
+                    $_SESSION['_debug_reset_url'] = $resetUrl;
+                    $_SESSION['_debug_email_ok']  = $emailOk;
+                }
                 // Não revelamos se o envio falhou (evita enumeração)
             }
 
@@ -122,6 +127,26 @@ siteHeader('Esqueci minha senha');
       ✅ Se este e-mail estiver cadastrado, você receberá um link para redefinir sua senha em breve.<br>
       <small style="opacity:.8">Verifique também a caixa de spam. O link expira em 1 hora.</small>
     </div>
+
+    <?php if (APP_DEBUG && isset($_SESSION['_debug_reset_url'])): ?>
+    <div style="background:#1e3a1e;border:1px solid #4ade80;border-radius:.5rem;padding:1rem 1.25rem;margin:1rem 0">
+      <p style="color:#4ade80;margin:0 0 .5rem;font-weight:700">🛠️ Modo debug — link de reset (não aparece em produção):</p>
+      <?php if (!$_SESSION['_debug_email_ok']): ?>
+      <p style="color:#f87171;margin:0 0 .5rem;font-size:.85rem">⚠️ O envio de e-mail falhou (SMTP não configurado?). Use o link abaixo diretamente:</p>
+      <?php else: ?>
+      <p style="color:#94a3b8;margin:0 0 .5rem;font-size:.85rem">✅ E-mail enviado. Link também disponível aqui para testes:</p>
+      <?php endif; ?>
+      <a href="<?= htmlspecialchars($_SESSION['_debug_reset_url']) ?>"
+         style="color:#7dd3fc;word-break:break-all;font-size:.9rem">
+        <?= htmlspecialchars($_SESSION['_debug_reset_url']) ?>
+      </a>
+      <?php unset($_SESSION['_debug_reset_url'], $_SESSION['_debug_email_ok']); ?>
+    </div>
+    <p style="color:#64748b;font-size:.78rem;margin:.25rem 0 1rem">
+      Para ocultar este painel em produção, defina <code>APP_DEBUG = false</code> em <code>includes/config.php</code>.
+    </p>
+    <?php endif; ?>
+
     <p class="auth-link"><a href="login.php">← Voltar ao login</a></p>
 
     <?php else: ?>

@@ -22,8 +22,8 @@ CREATE TABLE IF NOT EXISTS `courses` (
     `slug`               VARCHAR(255) NOT NULL UNIQUE,
     `description`        TEXT,
     `thumbnail`          VARCHAR(500),
-    `gdrive_folder_id`   VARCHAR(200) NOT NULL,
-    `gdrive_folder_url`  VARCHAR(500) NOT NULL,
+    `gdrive_folder_id`   VARCHAR(200) DEFAULT NULL,
+    `gdrive_folder_url`  VARCHAR(500) DEFAULT NULL,
     `published`          TINYINT(1) NOT NULL DEFAULT 0,
     `created_at`         DATETIME NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

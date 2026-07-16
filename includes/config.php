@@ -7,6 +7,13 @@ define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME', 'CloudiLMS');
 define('APP_URL', 'http://localhost/cloudilms');
 define('APP_VERSION', '1.0.0');
+
+/**
+ * Modo de depuração.
+ * true  → mostra o link de reset direto na página (nunca use true em produção!)
+ * false → comportamento normal: link só por e-mail
+ */
+define('APP_DEBUG', true);
 // Chave de criptografia AES-256 (32 bytes em hex). Nunca commitar em repositórios públicos.
 define('ENCRYPT_KEY', '');
 define('SESSION_LIFETIME', 3600 * 8);
